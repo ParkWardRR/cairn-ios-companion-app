@@ -502,7 +502,25 @@ The other suites cover payload encoding and decoding, throttle, link health, dri
 
 ### CI
 
-`.github/workflows/test.yml` runs `scripts/fetch-contracts.sh --release` then `swift test` on pushes to `main` and pull requests that touch `CairnCompanion/`, `contracts.lock`, `scripts/` or the workflow. It uses `runs-on: self-hosted`; this project does not use GitHub-hosted runners. **No self-hosted runner is registered for this repository yet, so the workflow badge will show no status, and nothing has run in CI.** Because of the macOS requirement above, the runner must be a Mac, not a Linux container. Until then, run the commands above locally before opening a pull request.
+`.github/workflows/test.yml` runs `scripts/fetch-contracts.sh --release` then `swift test` on pushes to `main` and pull requests that touch `CairnCompanion/`, `contracts.lock`, `scripts/` or the workflow. It uses `runs-on: self-hosted`; this project does not use GitHub-hosted runners. The runner is a **macOS LaunchAgent** (`cairn-mac-ios`), not one of the Podman Linux containers the other four repositories use: `CairnRuntime` imports CoreBluetooth, CoreLocation, UIKit and CryptoKit, so a Linux runner cannot build the test target at all. Its first green run was 2026-10-08. If a run sits queued, the LaunchAgent is probably down — it stops when the Mac's disk fills.
+
+## Releasing
+
+Three channels, defined for the whole project in the front door's [release process](https://github.com/ParkWardRR/cairn-driving-log-selfhosted/blob/main/docs/release-process.md): `dev` is a working tree with no promise, `beta` is a tagged pre-release carrying every feature including unproven ones, and `stable` is a tagged release carrying only what has been proven. A build stamps its channel and commit into its Info.plist and reads them back in **Settings → About**, so a tester reporting something names a build rather than "the latest one". A build that cannot say what it is reads as `dev` and never as `stable`.
+
+```sh
+scripts/release-testflight.sh stable                 # archive, export, upload to App Store Connect
+scripts/release-testflight.sh beta --export-only     # check signing without spending a build number
+```
+
+It refuses a dirty tree, runs the tests, regenerates the project from `project.yml` and stops if that disagrees with the committed `.xcodeproj`, archives, reads the identity back out of the archive, then exports. Bump `CURRENT_PROJECT_VERSION` in `project.yml` first: App Store Connect rejects a repeated build number. No credentials live on the machine — Xcode's own account session authenticates the upload and signs with a cloud-managed distribution certificate.
+
+| Released | Channel | Commit | Where |
+|---|---|---|---|
+| **0.1.0 (11)** — 2026-10-10 | `stable` | `75f545d` | TestFlight. Internal testers get it once processing finishes; external distribution needs the build assigned to the external group in App Store Connect, which requires Beta App Review |
+| 1.0 (10) — 2026-10-08 | before channels existed | — | TestFlight |
+
+The version is deliberately **below** the earlier `1.0`: per-repository semver stays pre-1.0 until someone without a toolchain can install Cairn ([Phase 32](https://github.com/ParkWardRR/cairn-driving-log-selfhosted/blob/main/ROADMAP.md#phase-32--release-engineering-flash-it-from-a-browser--planned)). Nothing has shipped to the App Store, so the lower number costs nothing and stops the app claiming a stability the project does not have.
 
 ## Demo mode and screenshots
 
