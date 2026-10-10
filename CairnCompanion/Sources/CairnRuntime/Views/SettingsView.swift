@@ -860,13 +860,20 @@ public struct SettingsView: View {
 
     @ViewBuilder
     private var aboutSection: some View {
-        Section("About") {
+        let build = BuildIdentity.current
+        Section {
             LabeledContent("App", value: "Cairn Companion")
-            if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                LabeledContent("Version", value: version)
+            LabeledContent("Version", value: build.version)
+            LabeledContent("Build", value: build.build)
+            LabeledContent("Channel", value: build.channel.title)
+            if let commit = build.commit {
+                LabeledContent("Commit", value: commit)
             }
-            if let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
-                LabeledContent("Build", value: build)
+        } header: {
+            Text("About")
+        } footer: {
+            if let notice = build.channel.notice {
+                Text(notice)
             }
         }
     }

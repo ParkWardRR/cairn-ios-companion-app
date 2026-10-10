@@ -36,8 +36,16 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(CAIRN_BUNDLE_ID)
         TARGETED_DEVICE_FAMILY: "1"
-        MARKETING_VERSION: "1.0"
-        CURRENT_PROJECT_VERSION: "10"
+        # Per-repository semver, pre-1.0 until a stranger can install Cairn without a toolchain
+        # (front door Phase 32). The build number must rise on every upload: App Store Connect
+        # rejects a repeat. scripts/release-testflight.sh checks both.
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "11"
+        # Which release channel this build belongs to: dev, beta or stable. The defaults here are
+        # the honest ones for a build made by hand; the release script passes the real values.
+        # See the front door's docs/release-process.md.
+        CAIRN_CHANNEL: dev
+        CAIRN_COMMIT: unknown
         # The CarPlay scene is declared by hand below; Xcode's generated manifest would replace it.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: NO
         IPHONEOS_DEPLOYMENT_TARGET: "18.0"
@@ -57,6 +65,10 @@ targets:
     info:
       path: App/Info.plist
       properties:
+        # So a build can say what it is: Settings -> About reads these back, and a tester
+        # reporting something gives a channel and a commit rather than "the latest one".
+        CairnChannel: $(CAIRN_CHANNEL)
+        CairnCommit: $(CAIRN_COMMIT)
         UIBackgroundModes: [location, bluetooth-central]
         # Only the CarPlay role is declared. The phone's window scene is left to SwiftUI's
         # WindowGroup, which supplies the default configuration itself.

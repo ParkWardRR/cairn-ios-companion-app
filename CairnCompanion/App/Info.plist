@@ -29,6 +29,10 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>CairnChannel</key>
+	<string>$(CAIRN_CHANNEL)</string>
+	<key>CairnCommit</key>
+	<string>$(CAIRN_COMMIT)</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
