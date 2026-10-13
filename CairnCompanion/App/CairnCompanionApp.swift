@@ -26,7 +26,8 @@ struct CairnCompanionApp: App {
         // Hold references in locals too, so the Task { ... } below captures those (reference-
         // typed) locals rather than `self`. Swift 6 refuses an escaping closure that captures
         // `self` from a struct init.
-        let session = DrivingSession(state: state, ble: ble, recorder: recorder)
+        let power = PowerStateMonitor()
+        let session = DrivingSession(state: state, ble: ble, recorder: recorder, power: power)
         self.session = session
         self.vehicleStore = vehicleStore
         self.maintenanceStore = maintenanceStore

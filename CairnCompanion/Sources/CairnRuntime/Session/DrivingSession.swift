@@ -10,7 +10,16 @@ public final class DrivingSession {
     public let state: SessionState
     private let ble: CairnBLEManager
     public let recorder: DriveRecorder
-    private let authorization = CLLocationManager()
+    public let power: PowerStateMonitor
+    private let authorization: CLLocationManager = {
+        let mgr = CLLocationManager()
+        #if os(iOS)
+        mgr.allowsBackgroundLocationUpdates = true
+        mgr.pausesLocationUpdatesAutomatically = false
+        mgr.showsBackgroundLocationIndicator = true
+        #endif
+        return mgr
+    }()
 
     private static let autoConnectKey = "cairn.autoConnectEnabled"
 
@@ -32,10 +41,11 @@ public final class DrivingSession {
     public var onDongleReady: (() -> Void)?
     public var onDongleLost: (() -> Void)?
 
-    public init(state: SessionState, ble: CairnBLEManager, recorder: DriveRecorder) {
+    public init(state: SessionState, ble: CairnBLEManager, recorder: DriveRecorder, power: PowerStateMonitor) {
         self.state = state
         self.ble = ble
         self.recorder = recorder
+        self.power = power
         ble.onReady = { [weak self] in
             self?.beginDriving()
             self?.onDongleReady?()
@@ -231,9 +241,20 @@ public final class DrivingSession {
         }
     }
 
+    private func refreshThrottleMode() {
+        if power.isCharging {
+            throttle.powerMode = .charger
+        } else if let q = state.deviceQuality, q.fixType >= 2 {
+            throttle.powerMode = .batterySaver
+        } else {
+            throttle.powerMode = .battery
+        }
+    }
+
     private func transmit(_ fix: PhoneGNSSFix) {
+        refreshThrottleMode()
         guard throttle.shouldSend(fix) else { return }
-        guard let payload = PayloadEncoder.encode(fix, now: Date(), seq: seq) else {
+        guard let payload = PayloadEncoder.encode(fix, now: Date(), seq: seq, isCharging: power.isCharging) else {
             state.droppedCount += 1
             return
         }

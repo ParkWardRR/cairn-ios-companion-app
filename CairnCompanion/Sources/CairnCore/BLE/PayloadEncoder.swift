@@ -30,13 +30,21 @@ public struct GNSSFixPayload: Sendable, Equatable {
     public var validity: Validity
     public var sampleAgeMs: UInt16
     public var seq: UInt16
+    public var companionFlags: UInt8
+
+    public struct CompanionFlags: OptionSet, Sendable {
+        public let rawValue: UInt8
+        public init(rawValue: UInt8) { self.rawValue = rawValue }
+        public static let charging = CompanionFlags(rawValue: 1 << 0)
+    }
 
     public init(
         latE7: Int32, lonE7: Int32, altCm: Int32,
         speedCmps: UInt16, headingCdeg: UInt16,
         hAccCm: UInt16, vAccCm: UInt16,
         fixType: UInt8, validity: Validity,
-        sampleAgeMs: UInt16, seq: UInt16
+        sampleAgeMs: UInt16, seq: UInt16,
+        companionFlags: UInt8 = 0
     ) {
         self.latE7 = latE7
         self.lonE7 = lonE7
@@ -49,6 +57,7 @@ public struct GNSSFixPayload: Sendable, Equatable {
         self.validity = validity
         self.sampleAgeMs = sampleAgeMs
         self.seq = seq
+        self.companionFlags = companionFlags
     }
 
     public var data: Data {
@@ -64,7 +73,8 @@ public struct GNSSFixPayload: Sendable, Equatable {
         out.append(validity.rawValue)
         out.appendLE(sampleAgeMs)
         out.appendLE(seq)
-        out.appendLE(UInt16(0)) // reserved
+        out.append(companionFlags)
+        out.append(0) // reserved
         return out
     }
 
@@ -77,7 +87,8 @@ public struct GNSSFixPayload: Sendable, Equatable {
             speedCmps: d.readLE(at: 12), headingCdeg: d.readLE(at: 14),
             hAccCm: d.readLE(at: 16), vAccCm: d.readLE(at: 18),
             fixType: d[20], validity: Validity(rawValue: d[21]),
-            sampleAgeMs: d.readLE(at: 22), seq: d.readLE(at: 24)
+            sampleAgeMs: d.readLE(at: 22), seq: d.readLE(at: 24),
+            companionFlags: d[26]
         )
     }
 }
@@ -89,7 +100,7 @@ public enum PayloadEncoder {
 
     /// Returns nil when the fix is stale and must not be sent. Invalid fixes are still encoded
     /// (validity bits clear, sentinels set); the firmware rejects `b0 == 0`.
-    public static func encode(_ fix: PhoneGNSSFix, now: Date, seq: UInt16) -> GNSSFixPayload? {
+    public static func encode(_ fix: PhoneGNSSFix, now: Date, seq: UInt16, isCharging: Bool = false) -> GNSSFixPayload? {
         let age = now.timeIntervalSince(fix.timestamp)
         guard age.isFinite, abs(age) <= maxFixAge else { return nil }
 
@@ -139,6 +150,9 @@ public enum PayloadEncoder {
 
         let fixType: UInt8 = !positionValid ? 0 : (altitudeValid ? 2 : 1)
 
+        var flags: UInt8 = 0
+        if isCharging { flags |= GNSSFixPayload.CompanionFlags.charging.rawValue }
+
         return GNSSFixPayload(
             latE7: latE7, lonE7: lonE7, altCm: altCm,
             speedCmps: speedCmps, headingCdeg: headingCdeg,
@@ -146,7 +160,8 @@ public enum PayloadEncoder {
             vAccCm: isValid(fix.verticalAccuracy) ? clampedU16(fix.verticalAccuracy * 100) : GNSSFixPayload.invalidU16,
             fixType: fixType, validity: validity,
             sampleAgeMs: UInt16(max(0, min(age * 1000, 65_535)).rounded()),
-            seq: seq
+            seq: seq,
+            companionFlags: flags
         )
     }
 
