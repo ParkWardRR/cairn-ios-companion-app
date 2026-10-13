@@ -17,3 +17,31 @@ jobs:
       - name: swift test
         working-directory: CairnCompanion
         run: swift test
+
+  # The app in a simulator. Separate from `swift test` because it needs the generated project, a
+  # simulator and about six minutes -- so a logic regression still reports in under a minute.
+  ui:
+    runs-on: self-hosted
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the pinned contracts
+        run: scripts/fetch-contracts.sh --release
+      - name: Generate the project
+        working-directory: CairnCompanion
+        run: xcodegen generate
+      # CODE_SIGN_IDENTITY=- because an unsigned build dies in the Keychain with -34018.
+      - name: xcodebuild test
+        working-directory: CairnCompanion
+        run: |
+          xcodebuild test \
+            -project CairnCompanion.xcodeproj -scheme CairnCompanion \
+            -destination 'platform=iOS Simulator,name=iPhone 17' \
+            -resultBundlePath /tmp/cairn-ui-tests.xcresult \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES
+      - name: Keep the result bundle when it fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-result
+          path: /tmp/cairn-ui-tests.xcresult

@@ -1,6 +1,9 @@
 import CairnCore
 import SwiftUI
 
+/// The live readings follow the phone's locale, exactly as the CarPlay HUD does.
+let liveUnits = HUDUnits.forLocale(.current)
+
 /// The single Phase 1 screen: auto-connect switch, phone vs internal receiver, acceptance feedback.
 public struct MainView: View {
     private let session: DrivingSession
@@ -318,11 +321,17 @@ private struct TelemetryCard: View {
                     let live = state.isLive(lastHeard: state.lastOBDAt, now: now)
                     MetricGrid {
                         Metric("RPM", obd.hasRPM ? "\(obd.rpm)" : "—")
-                        Metric("Speed", obd.speedKph.map { String(format: "%.0f", $0) } ?? "—", unit: obd.hasSpeed ? "km/h" : nil)
+                        // Same units as the CarPlay HUD: one drive must not read mph in the car
+                        // and km/h on the phone.
+                        let speed = obd.speedKph.map { liveUnits.speedParts(kph: $0) }
+                        Metric("Speed", speed?.value ?? "—", unit: obd.hasSpeed ? speed?.unit : nil)
                         Metric("Throttle", obd.hasThrottle ? "\(obd.throttlePct)" : "—", unit: obd.hasThrottle ? "%" : nil)
-                        Metric("Coolant", obd.hasCoolant ? "\(obd.coolantTempC)" : "—", unit: obd.hasCoolant ? "°C" : nil)
-                        Metric("Intake", obd.hasIntakeTemp ? "\(obd.intakeTempC)" : "—", unit: obd.hasIntakeTemp ? "°C" : nil)
-                        Metric("Boost", obd.boostKpa.map { String(format: "%.1f", $0) } ?? "—", unit: obd.hasBoost ? "kPa" : nil)
+                        let coolant = liveUnits.temperatureParts(celsius: Double(obd.coolantTempC))
+                        Metric("Coolant", obd.hasCoolant ? coolant.value : "—", unit: obd.hasCoolant ? coolant.unit : nil)
+                        let intake = liveUnits.temperatureParts(celsius: Double(obd.intakeTempC))
+                        Metric("Intake", obd.hasIntakeTemp ? intake.value : "—", unit: obd.hasIntakeTemp ? intake.unit : nil)
+                        let boost = obd.boostKpa.map { liveUnits.pressureParts(kpa: $0) }
+                        Metric("Boost", boost?.value ?? "—", unit: obd.hasBoost ? boost?.unit : nil)
                     }
                     .opacity(live ? 1 : 0.45)
                     if obd.stft1 != nil || obd.ltft1 != nil {

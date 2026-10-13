@@ -8,22 +8,47 @@
 
 /* Begin PBXBuildFile section */
 		010AB516EFBEAE671DE70836 /* CairnCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2157BE912A13ED0200C6E9 /* CairnCompanionApp.swift */; };
+		33E574EE18DE51627269A716 /* SettingsAndGarageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFB61E0495C1A7D91D426E6D /* SettingsAndGarageTests.swift */; };
 		49C8AA998882F97D98D9C1A2 /* CairnRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 8194D8111923C50345AEDD47 /* CairnRuntime */; };
+		68FA15C5D96496ED03A98B72 /* CairnApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 880E339582A0F07D893B6F9A /* CairnApp.swift */; };
 		9964632F1812CC2D009FBA42 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1F68A39F5C63DF9582280DE8 /* PrivacyInfo.xcprivacy */; };
+		A17FF575DF9280E2A179AD98 /* UnitsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53C385A262BC60BEB07E3485 /* UnitsTests.swift */; };
 		A2F12BC86A2E4BE3DF4FB1F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F25C8E5071A70524FB14CEF0 /* Assets.xcassets */; };
+		ABAEE38970A701F76B676DD4 /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 79F7649FE9BD0D0572E69CB6 /* README.md */; };
+		D9B84F86F7F388F54A5E5AE0 /* DriveTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186D4D0080195161CAB44B7B /* DriveTabTests.swift */; };
+		DA1238DE1DFCF00A1E93E58D /* TripsTabTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59A8EFDE4CECF00ACE94832B /* TripsTabTests.swift */; };
+		DE818D3AFF40BD1C2D57D970 /* LaunchAndTabsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BF928B96FBCC2E9F952505D /* LaunchAndTabsTests.swift */; };
 		DEBE330B7297E0BCA57160A3 /* DemoMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2660E6B18D6287323804A65 /* DemoMode.swift */; };
 		EAB00564990A93E7528EA5BD /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9063CB0A75E7DA254D821C54 /* CarPlaySceneDelegate.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		28D108335EEB1F483EDB4A14 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A47AB0997B88E23C74572E8E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4882229F6E7D851E1BE9735E;
+			remoteInfo = CairnCompanion;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		186D4D0080195161CAB44B7B /* DriveTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveTabTests.swift; sourceTree = "<group>"; };
 		1F68A39F5C63DF9582280DE8 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		2C915BBCB042E798AC2B2C03 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		490683BC313B464740E9D585 /* CairnCompanion.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CairnCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4BF928B96FBCC2E9F952505D /* LaunchAndTabsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAndTabsTests.swift; sourceTree = "<group>"; };
+		53C385A262BC60BEB07E3485 /* UnitsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnitsTests.swift; sourceTree = "<group>"; };
 		56A8902795E41E4DCED67606 /* CairnCompanion */ = {isa = PBXFileReference; lastKnownFileType = folder; name = CairnCompanion; path = .; sourceTree = SOURCE_ROOT; };
+		59A8EFDE4CECF00ACE94832B /* TripsTabTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripsTabTests.swift; sourceTree = "<group>"; };
 		5D2157BE912A13ED0200C6E9 /* CairnCompanionApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CairnCompanionApp.swift; sourceTree = "<group>"; };
+		79F7649FE9BD0D0572E69CB6 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		880E339582A0F07D893B6F9A /* CairnApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CairnApp.swift; sourceTree = "<group>"; };
 		9063CB0A75E7DA254D821C54 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
 		A2660E6B18D6287323804A65 /* DemoMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DemoMode.swift; sourceTree = "<group>"; };
+		B7811B58B2EA0A9C1DDAF201 /* CairnCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CairnCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB371EDA615C2376801123BF /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		EFB61E0495C1A7D91D426E6D /* SettingsAndGarageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsAndGarageTests.swift; sourceTree = "<group>"; };
 		F25C8E5071A70524FB14CEF0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FCF05D9B75AF694FB08315A9 /* CairnCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CairnCompanion.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -60,6 +85,7 @@
 				54A098654180CBF985B65AE0 /* App */,
 				7CCB027E2D1DFAE833922A98 /* Config */,
 				5C6ED93CCB209F004DCA6C22 /* Packages */,
+				7319A971B06ADC1805B00C87 /* UITests */,
 				682872F88BB8D63C69CAD872 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -76,8 +102,23 @@
 			isa = PBXGroup;
 			children = (
 				490683BC313B464740E9D585 /* CairnCompanion.app */,
+				B7811B58B2EA0A9C1DDAF201 /* CairnCompanionUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7319A971B06ADC1805B00C87 /* UITests */ = {
+			isa = PBXGroup;
+			children = (
+				880E339582A0F07D893B6F9A /* CairnApp.swift */,
+				186D4D0080195161CAB44B7B /* DriveTabTests.swift */,
+				4BF928B96FBCC2E9F952505D /* LaunchAndTabsTests.swift */,
+				79F7649FE9BD0D0572E69CB6 /* README.md */,
+				EFB61E0495C1A7D91D426E6D /* SettingsAndGarageTests.swift */,
+				59A8EFDE4CECF00ACE94832B /* TripsTabTests.swift */,
+				53C385A262BC60BEB07E3485 /* UnitsTests.swift */,
+			);
+			path = UITests;
 			sourceTree = "<group>";
 		};
 		7CCB027E2D1DFAE833922A98 /* Config */ = {
@@ -111,6 +152,25 @@
 			productReference = 490683BC313B464740E9D585 /* CairnCompanion.app */;
 			productType = "com.apple.product-type.application";
 		};
+		4DFD60DB18E213E040DE6F58 /* CairnCompanionUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 66A4FE5901EF11BA0C8E8040 /* Build configuration list for PBXNativeTarget "CairnCompanionUITests" */;
+			buildPhases = (
+				8054EE96E59B82015066B801 /* Sources */,
+				402BC71468F9A80ABF86C7E6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1C154174C4846C264E516644 /* PBXTargetDependency */,
+			);
+			name = CairnCompanionUITests;
+			packageProductDependencies = (
+			);
+			productName = CairnCompanionUITests;
+			productReference = B7811B58B2EA0A9C1DDAF201 /* CairnCompanionUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -123,6 +183,11 @@
 					4882229F6E7D851E1BE9735E = {
 						DevelopmentTeam = "$(CAIRN_TEAM_ID)";
 						ProvisioningStyle = Automatic;
+					};
+					4DFD60DB18E213E040DE6F58 = {
+						DevelopmentTeam = "$(CAIRN_TEAM_ID)";
+						ProvisioningStyle = Automatic;
+						TestTargetID = 4882229F6E7D851E1BE9735E;
 					};
 				};
 			};
@@ -144,11 +209,20 @@
 			projectRoot = "";
 			targets = (
 				4882229F6E7D851E1BE9735E /* CairnCompanion */,
+				4DFD60DB18E213E040DE6F58 /* CairnCompanionUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		402BC71468F9A80ABF86C7E6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABAEE38970A701F76B676DD4 /* README.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FB6176595EAE7A593574CE8B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -161,6 +235,19 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		8054EE96E59B82015066B801 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				68FA15C5D96496ED03A98B72 /* CairnApp.swift in Sources */,
+				D9B84F86F7F388F54A5E5AE0 /* DriveTabTests.swift in Sources */,
+				DE818D3AFF40BD1C2D57D970 /* LaunchAndTabsTests.swift in Sources */,
+				33E574EE18DE51627269A716 /* SettingsAndGarageTests.swift in Sources */,
+				DA1238DE1DFCF00A1E93E58D /* TripsTabTests.swift in Sources */,
+				A17FF575DF9280E2A179AD98 /* UnitsTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		82EDADB6258A4ED7289D6AD4 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -172,6 +259,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		1C154174C4846C264E516644 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4882229F6E7D851E1BE9735E /* CairnCompanion */;
+			targetProxy = 28D108335EEB1F483EDB4A14 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		372C4F72CAAB4E665F30BFAC /* Release */ = {
@@ -303,6 +398,40 @@
 			};
 			name = Release;
 		};
+		D5D0D3C4C8DF344949C1B765 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CAIRN_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CairnCompanion;
+			};
+			name = Release;
+		};
+		FB2C77E17B4974F351C34D20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(CAIRN_BUNDLE_ID).uitests";
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CairnCompanion;
+			};
+			name = Debug;
+		};
 		FC50C66FA59A53EABFF41495 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = CB371EDA615C2376801123BF /* Base.xcconfig */;
@@ -377,6 +506,15 @@
 			buildConfigurations = (
 				73376F7CFC8C501BA9C65AEF /* Debug */,
 				895FBE334AD28E1305AE3515 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		66A4FE5901EF11BA0C8E8040 /* Build configuration list for PBXNativeTarget "CairnCompanionUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FB2C77E17B4974F351C34D20 /* Debug */,
+				D5D0D3C4C8DF344949C1B765 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

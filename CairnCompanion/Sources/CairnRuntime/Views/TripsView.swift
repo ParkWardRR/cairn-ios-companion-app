@@ -434,17 +434,23 @@ struct TripDetailView: View {
     private var tripHeader: some View {
         TripRouteMap(runs: summary.routeRuns)
         MetricGrid {
-            Metric("Distance", summary.distanceMeters.map { String(format: "%.1f", $0 / 1000) } ?? "\u{2014}", unit: summary.distanceMeters == nil ? nil : "km")
+            let distance = summary.distanceMeters.map { tripUnits.distanceParts(metres: $0) }
+            Metric("Distance", distance?.value ?? "\u{2014}", unit: distance?.unit)
             Metric("Duration", formatDuration(summary.durationSeconds))
-            Metric("Average speed", summary.averageSpeedKph.map(String.init) ?? "\u{2014}", unit: summary.averageSpeedKph == nil ? nil : "km/h")
-            Metric("Top speed", summary.maxSpeedKph.map(String.init) ?? "\u{2014}", unit: summary.maxSpeedKph == nil ? nil : "km/h")
+            let average = summary.averageSpeedKph.map { tripUnits.speedParts(kph: Double($0)) }
+            Metric("Average speed", average?.value ?? "\u{2014}", unit: average?.unit)
+            let top = summary.maxSpeedKph.map { tripUnits.speedParts(kph: Double($0)) }
+            Metric("Top speed", top?.value ?? "\u{2014}", unit: top?.unit)
             if let fuel = summary.fuel {
-                Metric("Fuel economy", String(format: "%.1f", fuel.tripMpg), unit: "mpg")
+                let trip = tripUnits.economyParts(mpgUS: fuel.tripMpg)
+                Metric("Fuel economy", trip.value, unit: trip.unit)
                 if let cruise = fuel.cruiseMpg {
-                    Metric("Cruising", String(format: "%.1f", cruise), unit: "mpg")
+                    let parts = tripUnits.economyParts(mpgUS: cruise)
+                    Metric("Cruising", parts.value, unit: parts.unit)
                 }
                 if let gallons = summary.fuelGallons {
-                    Metric("Fuel used", String(format: "%.2f", gallons), unit: "gal")
+                    let used = tripUnits.volumeParts(gallonsUS: gallons)
+                    Metric("Fuel used", used.value, unit: used.unit)
                 }
             }
         }
@@ -579,7 +585,7 @@ struct TripDetailView: View {
                 }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     tile("Duration", formatDuration(trip.durationSeconds))
-                    if let speed = trip.maxSpeedKph { tile("Max speed", "\(speed) km/h") }
+                    if let speed = trip.maxSpeedKph { tile("Max speed", tripUnits.speedText(kph: Double(speed))) }
                     if let rpm = trip.maxRpm { tile("Max RPM", "\(rpm)") }
                     tile("OBD samples", "\(trip.obdSamples)")
                     tile("GNSS samples", "\(trip.gnssSamples)")

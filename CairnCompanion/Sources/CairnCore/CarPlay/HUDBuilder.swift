@@ -111,7 +111,7 @@ public enum HUDBuilder {
         case .speed:
             guard let kph = obd.speedKph else { return nil }
             return Reading(
-                caption: units.speed == .mph ? "\(Int((kph * 0.621371).rounded())) mph" : "\(Int(kph.rounded())) km/h",
+                caption: units.caption(units.speedParts(kph: kph)),
                 fraction: span(kph, 0, 200), band: .nominal
             )
         case .coolant:
@@ -125,9 +125,7 @@ public enum HUDBuilder {
             return temperature(Double(obd.intakeTempC), units: units, scale: (-20, 90), cold: -100, warm: 70, hot: 85)
         case .boost:
             guard let kpa = obd.boostKpa else { return nil }
-            let caption = units.pressure == .psi
-                ? String(format: "%.1f psi", kpa * 0.1450377)
-                : "\(Int(kpa.rounded())) kPa"
+            let caption = units.caption(units.pressureParts(kpa: kpa))
             // The dongle reports gauge pressure, so vacuum is negative. No band: a safe ceiling
             // depends on the engine, and Cairn does not know which engine this is.
             return Reading(caption: caption, fraction: span(kpa, -100, 200), band: .nominal)
@@ -149,9 +147,7 @@ public enum HUDBuilder {
         _ celsius: Double, units: HUDUnits,
         scale: (Double, Double), cold: Double, warm: Double, hot: Double
     ) -> Reading {
-        let caption = units.temperature == .fahrenheit
-            ? "\(Int((celsius * 9 / 5 + 32).rounded())) °F"
-            : "\(Int(celsius.rounded())) °C"
+        let caption = units.caption(units.temperatureParts(celsius: celsius))
         let band: HUDBand = celsius >= hot ? .alarm : (celsius >= warm || celsius < cold) ? .caution : .nominal
         return Reading(caption: caption, fraction: span(celsius, scale.0, scale.1), band: band)
     }

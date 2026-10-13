@@ -35,6 +35,37 @@ public struct HUDUnits: Sendable, Equatable {
 
     public static let metric = HUDUnits(speed: .kph, temperature: .celsius, pressure: .kpa)
     public static let imperial = HUDUnits(speed: .mph, temperature: .fahrenheit, pressure: .psi)
+
+    /// Units follow the phone's locale: a US driver reads mph, °F and psi without being asked, and
+    /// a UK one reads mph and psi but still °C. The HUD, the Drive tab and the Trips tab all ask
+    /// this, so a drive reads the same everywhere.
+    public static func forLocale(_ locale: Locale) -> HUDUnits {
+        switch locale.measurementSystem {
+        case .us: .imperial
+        case .uk: HUDUnits(speed: .mph, temperature: .celsius, pressure: .psi)
+        default: .metric
+        }
+    }
+
+    // MARK: Formatting
+    //
+    // The HUD and the Drive tab show the same live readings, so they convert them in one place:
+    // a US owner was reading mph in the car and km/h on the phone.
+
+    public func speedParts(kph: Double) -> (value: String, unit: String) {
+        speed == .mph ? ("\(Int((kph / 1.609344).rounded()))", "mph") : ("\(Int(kph.rounded()))", "km/h")
+    }
+
+    public func temperatureParts(celsius: Double) -> (value: String, unit: String) {
+        temperature == .fahrenheit ? ("\(Int((celsius * 9 / 5 + 32).rounded()))", "°F") : ("\(Int(celsius.rounded()))", "°C")
+    }
+
+    public func pressureParts(kpa: Double) -> (value: String, unit: String) {
+        pressure == .psi ? (String(format: "%.1f", kpa * 0.1450377), "psi") : ("\(Int(kpa.rounded()))", "kPa")
+    }
+
+    /// Value and unit joined by a space, as a HUD caption wants them.
+    public func caption(_ parts: (value: String, unit: String)) -> String { "\(parts.value) \(parts.unit)" }
 }
 
 // MARK: - Bands and freshness

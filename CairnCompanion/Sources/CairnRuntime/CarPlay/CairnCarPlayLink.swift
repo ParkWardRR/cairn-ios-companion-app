@@ -27,15 +27,9 @@ public final class CairnCarPlayLink {
 
     func currentDeviceInfo() -> DeviceInfo? { deviceInfo() }
 
-    /// Units follow the phone's locale: a US driver reads mph, °F and psi without being asked, and a
-    /// UK one reads mph and psi but still °C.
-    public static var units: HUDUnits {
-        switch Locale.current.measurementSystem {
-        case .us: .imperial
-        case .uk: HUDUnits(speed: .mph, temperature: .celsius, pressure: .psi)
-        default: .metric
-        }
-    }
+    /// Units follow the phone's locale. The rule itself lives in `HUDUnits.forLocale`, so the
+    /// Drive tab reads the same as the HUD.
+    public static var units: HUDUnits { .forLocale(.current) }
 }
 
 // MARK: - SessionState to HUDInput

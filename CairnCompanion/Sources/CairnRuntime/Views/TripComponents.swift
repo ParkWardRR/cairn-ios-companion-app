@@ -19,8 +19,11 @@ func formatTripDuration(_ seconds: TimeInterval) -> String {
     return "\(s / 3600) h \(String(format: "%02d", (s % 3600) / 60)) m"
 }
 
+/// Miles or kilometres, following the phone's locale, as CarPlay already did.
+let tripUnits = DisplayUnits.forLocale(.current)
+
 func formatDistance(_ meters: Double) -> String {
-    meters < 1000 ? "\(Int(meters)) m" : String(format: "%.1f km", meters / 1000)
+    tripUnits.distanceText(metres: meters)
 }
 
 // MARK: - Route sketch
@@ -91,8 +94,12 @@ struct TripCard: View {
                         stat(formatTripDuration(summary.durationSeconds), "Duration")
                     }
                     GridRow {
-                        stat(summary.fuel.map { String(format: "%.1f mpg", $0.tripMpg) }, "Economy")
-                        stat(summary.averageSpeedKph.map { "\($0) km/h" } ?? summary.maxSpeedKph.map { "\($0) top" }, summary.averageSpeedKph == nil ? "Speed" : "Average")
+                        stat(summary.fuel.map { tripUnits.economyText(mpgUS: $0.tripMpg) }, "Economy")
+                        stat(
+                            summary.averageSpeedKph.map { tripUnits.speedText(kph: Double($0)) }
+                                ?? summary.maxSpeedKph.map { "\(tripUnits.speedText(kph: Double($0))) top" },
+                            summary.averageSpeedKph == nil ? "Speed" : "Average"
+                        )
                     }
                 }
                 if let sync = entry.syncLabel {

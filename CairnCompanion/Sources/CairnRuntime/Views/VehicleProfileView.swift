@@ -2,6 +2,12 @@ import CairnCore
 import Charts
 import SwiftUI
 
+/// Readings are stored in kilometres and shown in whichever unit the owner drives in. `formatted`
+/// has taken `useMiles` all along; nothing was passing it, so a US owner read their odometer in km.
+/// The entry field stays explicitly "(km)" with a live miles conversion under it, because that is a
+/// number the owner copies off the dash and converting it on the way in would lose the original.
+let odometerInMiles = DisplayUnits.forLocale(.current).distance == .miles
+
 struct VehicleProfileView: View {
     @State private var vehicle: Vehicle
     let vehicleStore: GRDBVehicleStore
@@ -211,7 +217,7 @@ struct VehicleProfileView: View {
             } else {
                 if let latest = odometerHistory.first {
                     MetricGrid {
-                        Metric("Current", latest.formatted())
+                        Metric("Current", latest.formatted(useMiles: odometerInMiles))
                         Metric("Recorded", latest.recordedAt.formatted(date: .abbreviated, time: .omitted))
                     }
                 }
@@ -219,15 +225,16 @@ struct VehicleProfileView: View {
                 if odometerHistory.count > 1 {
                     let chartData = odometerHistory.sorted { $0.recordedAt < $1.recordedAt }
 
+                    let axis = odometerInMiles ? "mi" : "km"
                     Chart(chartData, id: \.id) { reading in
                         LineMark(
                             x: .value("Date", reading.recordedAt),
-                            y: .value("km", reading.odometerKm)
+                            y: .value(axis, odometerInMiles ? reading.odometerMiles : reading.odometerKm)
                         )
                         .interpolationMethod(.catmullRom)
                         PointMark(
                             x: .value("Date", reading.recordedAt),
-                            y: .value("km", reading.odometerKm)
+                            y: .value(axis, odometerInMiles ? reading.odometerMiles : reading.odometerKm)
                         )
                     }
                     .chartYAxis {
@@ -251,7 +258,7 @@ struct VehicleProfileView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(reading.formatted())
+                            Text(reading.formatted(useMiles: odometerInMiles))
                                 .font(.subheadline.weight(.medium).monospacedDigit())
                         }
                     }

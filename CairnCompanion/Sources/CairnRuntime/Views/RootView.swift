@@ -47,18 +47,14 @@ public struct RootView: View {
             .task {
                 // Simulator has no camera and iOS asks "Open in Cairn?" for simctl openurl, so
                 // let a test launch hand the link over directly: CAIRN_TEST_LINK=cairn://configure?...
+                // It goes through `handle` like a real scan, so a test that sends a bad link sees
+                // what an owner with a bad QR code sees.
                 if let raw = ProcessInfo.processInfo.environment["CAIRN_TEST_LINK"], let url = URL(string: raw) {
-                    pendingLink = (try? ConfigureLink.parse(url)).map(PendingLink.init)
+                    handle(url)
                 }
             }
             #endif
-            .onOpenURL { url in
-                do {
-                    pendingLink = PendingLink(link: try ConfigureLink.parse(url))
-                } catch {
-                    linkError = "That link isn't a valid Cairn setup code. Ask for a new QR code."
-                }
-            }
+            .onOpenURL { url in handle(url) }
             .sheet(item: $pendingLink) { pending in
                 ConfigureLinkSheet(link: pending.link, syncClient: syncClient, enrolmentService: enrolmentService) {
                     pendingLink = nil
@@ -69,6 +65,15 @@ public struct RootView: View {
             } message: {
                 Text(linkError ?? "")
             }
+    }
+
+    /// A `cairn://configure?...` link, however it arrived: scanned, tapped, or handed to a test.
+    private func handle(_ url: URL) {
+        do {
+            pendingLink = PendingLink(link: try ConfigureLink.parse(url))
+        } catch {
+            linkError = "That link isn't a valid Cairn setup code. Ask for a new QR code."
+        }
     }
 
     @ViewBuilder

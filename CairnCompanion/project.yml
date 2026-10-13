@@ -40,7 +40,7 @@ targets:
         # (front door Phase 32). The build number must rise on every upload: App Store Connect
         # rejects a repeat. scripts/release-testflight.sh checks both.
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "11"
+        CURRENT_PROJECT_VERSION: "12"
         # Which release channel this build belongs to: dev, beta or stable. The defaults here are
         # the honest ones for a build made by hand; the release script passes the real values.
         # See the front door's docs/release-process.md.
@@ -62,6 +62,9 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Cairn Companion streams your phone's location to your Cairn device during a driving session.
         INFOPLIST_KEY_NSMotionUsageDescription: Cairn Companion reads the barometer to send relative altitude to your Cairn device.
         INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: Cairn Companion starts sending your phone's location to your Cairn device when it connects, even if the app is in the background.
+    scheme:
+      testTargets:
+        - CairnCompanionUITests
     info:
       path: App/Info.plist
       properties:
@@ -86,3 +89,18 @@ targets:
             CFBundleURLSchemes: [cairn]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+
+  # Drives the real app in the simulator: taps the tabs, walks the onboarding, opens a trip.
+  # The unit suite (CairnCoreTests) covers the logic; nothing but this notices a view that
+  # crashes on appear or a screen with no way out. See UITests/README.md.
+  CairnCompanionUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: CairnCompanion
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(CAIRN_BUNDLE_ID).uitests
+        TEST_TARGET_NAME: CairnCompanion
+        GENERATE_INFOPLIST_FILE: YES
