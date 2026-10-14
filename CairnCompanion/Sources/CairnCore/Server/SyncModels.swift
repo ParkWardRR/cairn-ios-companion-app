@@ -196,9 +196,10 @@ public struct SyncChange: Codable, Sendable, Equatable {
     public var vehicleID: String?
     public var data: JSONValue?
     public var operation: JSONValue?
+    public var deleted: Bool?
 
     enum CodingKeys: String, CodingKey {
-        case at, type, data, operation
+        case at, type, data, operation, deleted
         case serverSequence = "server_sequence"
         case entityType = "entity_type"
         case entityID = "entity_id"
