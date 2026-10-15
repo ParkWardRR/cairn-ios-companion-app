@@ -16,7 +16,7 @@ enum DemoMode {
     static var seedsTrips: Bool { ProcessInfo.processInfo.environment["CAIRN_DEMO_TRIPS"] != nil }
 
     /// The fixed ids the seeded drives use, so launching again replaces them instead of piling up more.
-    private static func seededID(_ n: Int) -> UUID {
+    nonisolated private static func seededID(_ n: Int) -> UUID {
         UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", n))!
     }
 
@@ -30,9 +30,12 @@ enum DemoMode {
     /// a DEBUG build launched by the UI tests.
     static func removeSeededTripsForUITest(from store: any DriveStore) {
         guard ProcessInfo.processInfo.environment["CAIRN_UITEST"] != nil, !seedsTrips else { return }
+        // The ids are made here, on the main actor: the task must not need it, because the
+        // main thread is waiting on the task.
+        let ids = (1...5).map(seededID)
         let done = DispatchSemaphore(value: 0)
         Task.detached {
-            for n in 1...5 { try? await store.delete(seededID(n)) }
+            for id in ids { try? await store.delete(id) }
             done.signal()
         }
         _ = done.wait(timeout: .now() + 5)
@@ -125,6 +128,31 @@ enum DemoMode {
         state.sentCount = 300
     }
 
+    /// A plausible `OBD_LIVE` notify, built through the same decoder the BLE path uses, so the
+    /// Live Telemetry card -- the Drive tab's only readings in the owner's units (speed,
+    /// temperatures, boost) -- has something to show. Without it the streaming scenario showed
+    /// no unit at all, and UnitsTests compared the Trips tab against nothing.
+    private static func demoOBD(speedKph: Double) -> OBDLiveSnapshot? {
+        var d = Data(count: OBDLiveSnapshot.size)
+        func u16(_ v: UInt16, _ at: Int) { d[at] = UInt8(v & 0xFF); d[at + 1] = UInt8(v >> 8) }
+        func i16(_ v: Int16, _ at: Int) { u16(UInt16(bitPattern: v), at) }
+        u16(2150, 0)                                // rpm
+        u16(UInt16(speedKph * 10), 2)               // speed, kph x 10
+        d[4] = 22; d[5] = 41                        // throttle %, load %
+        i16(90, 6); i16(31, 8)                      // coolant, intake, deg C
+        i16(1012, 10)                               // boost, kPa x 10
+        u16(1840, 12)                               // MAF, g/s x 100
+        u16(OBDLiveSnapshot.invalidU16, 14)         // fuel pressure: not read
+        i16(1450, 16)                               // timing advance x 100
+        i16(-150, 18); i16(220, 20)                 // STFT, LTFT bank 1 x 100
+        i16(OBDLiveSnapshot.invalidI16, 22); i16(OBDLiveSnapshot.invalidI16, 24)
+        i16(OBDLiveSnapshot.invalidI16, 26)         // oil temperature: not read
+        u16(14100, 28)                              // supply mV
+        u16(0xFFFF, 30)                             // PID bitmap
+        d[32] = 120                                 // age, ms (u32 LE)
+        return PayloadDecoder.obdLive(d)
+    }
+
     private static func stream(to state: SessionState) {
         state.connection = .ready
         state.isDriving = true
@@ -145,6 +173,8 @@ enum DemoMode {
                     horizontalAccuracy: 5, verticalAccuracy: 8,
                     speed: 24.6 + sin(tick) * 0.4, course: 92, timestamp: Date().addingTimeInterval(-0.2)
                 )
+                state.obdLive = demoOBD(speedKph: 88.5 + sin(tick) * 1.5)
+                state.lastOBDAt = Date()
                 state.lastQualityAt = Date() // keeps the freshness badges and health ring live
                 state.lastStatusAt = Date()
                 tick += 0.5

@@ -60,9 +60,20 @@ final class UnitsTests: XCTestCase {
         let cairn = CairnApp(demo: "streaming", trips: true)
         cairn.waitUntilReady()
 
-        // Whatever the live readings use, the trip list must use the same.
-        let live = cairn.visibleText()
+        // Whatever the live readings use, the trip list must use the same. The readings that
+        // carry the owner's units (speed, temperatures, boost) are in the Live Telemetry card,
+        // below the fold, so read the tab as it scrolls rather than only its first screen.
+        var live = Set(cairn.visibleText())
+        for _ in 0..<3 {
+            cairn.app.swipeUp()
+            live.formUnion(cairn.visibleText())
+        }
         let liveImperial = Self.imperial.contains { unit in live.contains { $0 == unit } }
+        let liveMetric = Self.metric.contains { unit in live.contains { $0 == unit } }
+        XCTAssertTrue(
+            liveImperial || liveMetric,
+            "the Drive tab shows no unit to compare: \(live.sorted().prefix(20))"
+        )
 
         cairn.go(to: .trips)
         XCTAssertTrue(cairn.driveCards.firstMatch.waitForExistence(timeout: 25), "no drives listed")
