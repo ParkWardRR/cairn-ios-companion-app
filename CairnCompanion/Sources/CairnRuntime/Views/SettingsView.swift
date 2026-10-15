@@ -35,10 +35,6 @@ public struct SettingsView: View {
     @State private var isLoadingAdmin = false
     @State private var revokeTarget: ClientEntry?
     @State private var showRevokeConfirm = false
-    @State private var dashboard = DashboardAccess()
-    @State private var showDashboard = false
-    @State private var showDashboardCode = false
-    @State private var dashboardCode = ""
     @AppStorage(FuelEstimate.ethanolKey) private var ethanol = FuelEstimate.defaultEthanolPercent
 
     let offload: OffloadController?
@@ -60,7 +56,6 @@ public struct SettingsView: View {
                 if enrolledIdentity?.isAdmin == true {
                     adminSection
                 }
-                if syncClient.hasServer { dashboardSection }
                 fuelSection
                 bluetoothSection
                 if let offload {
@@ -148,109 +143,6 @@ public struct SettingsView: View {
             Text("Fuel")
         } footer: {
             Text("What is in the tank, for the economy shown on each trip. The car's fuel rate is not read, so economy is estimated from airflow, and the blend changes the estimate.")
-        }
-    }
-
-    // MARK: - Dashboard (passkeys)
-
-    private var dashboardSection: some View {
-        Section {
-            Toggle("Same address as the server", isOn: $dashboard.sameHost)
-                .onChange(of: dashboard.sameHost) { _, _ in Task { await dashboard.refresh() } }
-            if !dashboard.sameHost {
-                TextField("https://dashboard.example.lan", text: $dashboard.typedURL)
-                    .textContentType(.URL)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                    #endif
-                    .onSubmit { Task { await dashboard.refresh() } }
-            } else if let url = dashboard.url {
-                // what "the same" came to, so it can be checked at a glance
-                Text(url.absoluteString).font(.footnote).foregroundStyle(.secondary)
-            }
-
-            Label(dashboardStatusText, systemImage: dashboardStatusSymbol)
-                .font(.subheadline)
-                .foregroundStyle(dashboardStatusTone.color)
-
-            #if os(iOS)
-            switch dashboard.status {
-            case .signedIn:
-                Button { showDashboard = true } label: { Label("Open the dashboard", systemImage: "rectangle.on.rectangle") }
-            case .signedOut(let passkeys) where passkeys > 0:
-                Button { Task { await dashboard.signIn() } } label: { Label("Sign in with a passkey", systemImage: "person.badge.key.fill") }
-            default:
-                EmptyView()
-            }
-
-            if dashboard.url != nil, dashboard.status != .unreachable, dashboard.status != .checking {
-                Button {
-                    if case .signedOut(let passkeys) = dashboard.status, passkeys == 0 { showDashboardCode = true }
-                    else { Task { await dashboard.createPasskey() } }
-                } label: { Label("Create a passkey on this iPhone", systemImage: "key.fill") }
-            }
-            if case .signedIn(let viaTailnet, _, _) = dashboard.status, !viaTailnet {
-                Button("Sign out of the dashboard", role: .destructive) { Task { await dashboard.signOut() } }
-            }
-            #endif
-
-            if dashboard.busy { ProgressView() }
-            if let message = dashboard.message {
-                Text(message).font(.footnote).foregroundStyle(dashboard.failed ? Color.red : Color.secondary)
-            }
-        } header: {
-            Text("Dashboard")
-        } footer: {
-            Text("The dashboard is the web page for your server, normally on the same host name. A passkey is your iPhone's own sign-in: Face ID, kept in iCloud Keychain, and the same one Safari uses there. On your tailnet, the dashboard already knows this phone and needs no sign-in.")
-        }
-        .task(id: syncClient.lanURL) {
-            dashboard.serverURL = syncClient.lanURL
-            await dashboard.refresh()
-        }
-        #if os(iOS)
-        .sheet(isPresented: $showDashboard) {
-            if let url = dashboard.url { DashboardSheet(url: url, cookies: dashboard.sessionCookies) }
-        }
-        .alert("One-time code", isPresented: $showDashboardCode) {
-            SecureField("Code from the server", text: $dashboardCode)
-            Button("Create passkey") {
-                let code = dashboardCode
-                dashboardCode = ""
-                Task { await dashboard.createPasskey(code: code) }
-            }
-            Button("Cancel", role: .cancel) { dashboardCode = "" }
-        } message: {
-            Text("The very first passkey needs the code in bootstrap-code on the server (sudo cat /var/lib/cairn-ui/bootstrap-code), unless this phone is a tailnet device the dashboard allows.")
-        }
-        #endif
-    }
-
-    private var dashboardStatusText: String {
-        switch dashboard.status {
-        case .unset: dashboard.addressProblem ?? "Checking\u{2026}"
-        case .checking: "Checking\u{2026}"
-        case .signedOut(let passkeys): passkeys == 0 ? "No passkey exists yet." : "Not signed in."
-        case .signedIn(let viaTailnet, _, _): viaTailnet ? "Signed in: this phone is on your tailnet." : "Signed in with a passkey."
-        case .unreachable: "Can't reach the dashboard."
-        }
-    }
-
-    private var dashboardStatusSymbol: String {
-        switch dashboard.status {
-        case .signedIn: "checkmark.seal.fill"
-        case .unreachable: "wifi.exclamationmark"
-        case .signedOut: "lock.fill"
-        default: "link"
-        }
-    }
-
-    private var dashboardStatusTone: Tone {
-        switch dashboard.status {
-        case .signedIn: .good
-        case .unreachable: .bad
-        default: .neutral
         }
     }
 
