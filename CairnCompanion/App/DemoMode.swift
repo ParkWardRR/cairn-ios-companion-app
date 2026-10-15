@@ -15,14 +15,36 @@ enum DemoMode {
     /// `CAIRN_DEMO_TRIPS=1` writes a few finished drives with tracks, so the Trips tab has something to show.
     static var seedsTrips: Bool { ProcessInfo.processInfo.environment["CAIRN_DEMO_TRIPS"] != nil }
 
+    /// The fixed ids the seeded drives use, so launching again replaces them instead of piling up more.
+    private static func seededID(_ n: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", n))!
+    }
+
+    /// A UI-test launch that did not ask for trips gets none.
+    ///
+    /// UI tests share one simulator and the drive store is on disk, so the drives one test
+    /// seeds are still there when the next launches. The empty-state test runs after six
+    /// that seed, and so never saw an empty list (it failed from 2026-10-13 on, hidden
+    /// behind a CI job that could not start). It opens straight onto the Trips tab, whose
+    /// first load would race an asynchronous delete, so this waits -- briefly, and only in
+    /// a DEBUG build launched by the UI tests.
+    static func removeSeededTripsForUITest(from store: any DriveStore) {
+        guard ProcessInfo.processInfo.environment["CAIRN_UITEST"] != nil, !seedsTrips else { return }
+        let done = DispatchSemaphore(value: 0)
+        Task.detached {
+            for n in 1...5 { try? await store.delete(seededID(n)) }
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 5)
+    }
+
     static func seedTrips(into store: any DriveStore) async {
         let now = Date()
         // (hours ago, minutes long, loop radius in degrees, bench?)
         let drives: [(Double, Double, Double, Bool)] = [(2, 24, 0.020, false), (5, 11, 0.008, false), (27, 52, 0.045, false), (30, 1, 0, true), (52, 33, 0.030, false)]
         for (i, (hoursAgo, minutes, radius, bench)) in drives.enumerated() {
             let start = now.addingTimeInterval(-hoursAgo * 3600)
-            // fixed ids, so launching again replaces these instead of piling up more
-            var s = DriveSession(id: UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", i + 1))!, startedAt: start)
+            var s = DriveSession(id: seededID(i + 1), startedAt: start)
             s.lifecycle = .closed
             s.closedAt = start.addingTimeInterval(minutes * 60)
             s.obdReceived = !bench

@@ -52,6 +52,7 @@ struct CairnCompanionApp: App {
         CairnCarPlayLink.shared.attach(state: state, deviceInfo: { ble.lastDeviceInfo })
 
         #if DEBUG
+        DemoMode.removeSeededTripsForUITest(from: driveStore)
         if DemoMode.seedsTrips {
             Task { await DemoMode.seedTrips(into: driveStore) }
             syncClient.injectDemoTrips(DemoMode.demoServerTrips())
