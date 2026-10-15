@@ -212,6 +212,7 @@ public final class TripSyncClient {
         let tables = manifest?.tables ?? [
             "bundles", "position", "imu", "obd", "boost",
             "status", "transition", "gap", "drive_summary",
+            "trip_summary",
         ]
 
         do {

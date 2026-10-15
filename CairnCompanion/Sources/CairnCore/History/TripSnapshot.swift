@@ -5,18 +5,31 @@ import Foundation
 public struct TripSnapshot: Codable, Identifiable, Sendable, Equatable {
     /// boot_id from the dongle — one power cycle = one trip.
     public let id: String
+    /// The `vehicle_id:started_ms` format id from `trip_summary`; nil when read from the older
+    /// `drive_summary` table.
+    public var tripId: String?
     public var startedAt: Date
     public var endedAt: Date?
     public var durationSeconds: TimeInterval
+    /// Seconds the dongle reported as driving (leg transitions); nil when not available.
+    public var drivingSeconds: TimeInterval?
 
+    /// Top GNSS-derived speed (from the `position` table or `max_gnss_speed_mps`).
     public var maxSpeedKph: Int?
+    /// Top OBD-reported speed (from `max_obd_speed_kph` in `trip_summary`).
+    public var maxObdSpeedKph: Int?
     public var maxRpm: Int?
     public var obdSamples: Int
     public var gnssSamples: Int
     public var fixSamples: Int
     public var phoneSamples: Int
+    public var boostSamples: Int
     public var gapCount: Int
     public var gapDurationMs: Int
+    /// Longest single GNSS gap in milliseconds.
+    public var maxGapMs: Int?
+    /// How many legs the dongle recorded (nil when unknown).
+    public var legCount: Int?
     public var warnings: String?
 
     public var startLat: Double?
@@ -36,29 +49,40 @@ public struct TripSnapshot: Codable, Identifiable, Sendable, Equatable {
     public var snapshotAt: Date
 
     public init(
-        id: String, startedAt: Date, endedAt: Date? = nil,
+        id: String, tripId: String? = nil,
+        startedAt: Date, endedAt: Date? = nil,
         durationSeconds: TimeInterval,
-        maxSpeedKph: Int? = nil, maxRpm: Int? = nil,
+        drivingSeconds: TimeInterval? = nil,
+        maxSpeedKph: Int? = nil, maxObdSpeedKph: Int? = nil,
+        maxRpm: Int? = nil,
         obdSamples: Int = 0, gnssSamples: Int = 0,
         fixSamples: Int = 0, phoneSamples: Int = 0,
+        boostSamples: Int = 0,
         gapCount: Int = 0, gapDurationMs: Int = 0,
+        maxGapMs: Int? = nil, legCount: Int? = nil,
         warnings: String? = nil,
         startLat: Double? = nil, startLon: Double? = nil,
         vehicleID: String? = nil, deviceID: String? = nil,
         snapshotAt: Date = Date()
     ) {
         self.id = id
+        self.tripId = tripId
         self.startedAt = startedAt
         self.endedAt = endedAt
         self.durationSeconds = durationSeconds
+        self.drivingSeconds = drivingSeconds
         self.maxSpeedKph = maxSpeedKph
+        self.maxObdSpeedKph = maxObdSpeedKph
         self.maxRpm = maxRpm
         self.obdSamples = obdSamples
         self.gnssSamples = gnssSamples
         self.fixSamples = fixSamples
         self.phoneSamples = phoneSamples
+        self.boostSamples = boostSamples
         self.gapCount = gapCount
         self.gapDurationMs = gapDurationMs
+        self.maxGapMs = maxGapMs
+        self.legCount = legCount
         self.warnings = warnings
         self.startLat = startLat
         self.startLon = startLon

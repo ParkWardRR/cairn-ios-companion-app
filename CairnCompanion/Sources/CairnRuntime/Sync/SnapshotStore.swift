@@ -31,9 +31,103 @@ actor SnapshotStore {
     func trips() throws -> [TripSnapshot] {
         guard let conn = connection else { return [] }
 
+        let hasTripSummary = (try? conn.query("SELECT 1 FROM trip_summary LIMIT 1")) != nil
+        if hasTripSummary {
+            return try tripsFromTripSummary(conn)
+        }
+
         let hasDriveSummary = (try? conn.query("SELECT 1 FROM drive_summary LIMIT 1")) != nil
         guard hasDriveSummary else { return [] }
+        return try tripsFromDriveSummary(conn)
+    }
 
+    /// Read trips from the newer `trip_summary` materialized view.
+    private func tripsFromTripSummary(_ conn: Connection) throws -> [TripSnapshot] {
+        let sql = """
+            SELECT
+                boot_id,
+                trip_id,
+                started_at,
+                ended_at,
+                duration_ms,
+                driving_ms,
+                leg_count,
+                distance_m,
+                max_gnss_speed_mps,
+                max_obd_speed_kph,
+                max_rpm,
+                obd_samples,
+                gnss_samples,
+                fix_samples,
+                boost_samples,
+                gap_count,
+                gap_duration_ms,
+                max_gap_ms,
+                vehicle_id,
+                device_id
+            FROM trip_summary
+            ORDER BY started_at DESC
+        """
+
+        let result = try conn.query(sql)
+        var snapshots: [TripSnapshot] = []
+
+        for i: DBInt in 0..<result.rowCount {
+            guard let bootId = strVal(result, col: 0, row: i) else { continue }
+            let tripId = strVal(result, col: 1, row: i)
+            let startDate = tsVal(result, col: 2, row: i) ?? .distantPast
+            let endDate = tsVal(result, col: 3, row: i)
+            let durationMs = dblVal(result, col: 4, row: i) ?? 0
+            let durationS = durationMs / 1000.0
+            let drivingMs = dblVal(result, col: 5, row: i)
+            let drivingS = drivingMs.map { $0 / 1000.0 }
+            let legCount = i64Val(result, col: 6, row: i)
+            let distanceM = dblVal(result, col: 7, row: i)
+            let maxGnssMps = dblVal(result, col: 8, row: i)
+            let maxGnssKph = maxGnssMps.map { Int(($0 * 3.6).rounded()) }
+            let maxObdKph = i64Val(result, col: 9, row: i)
+            let maxRpm = i64Val(result, col: 10, row: i)
+            let obdSamples = i64Val(result, col: 11, row: i) ?? 0
+            let gnssSamples = i64Val(result, col: 12, row: i) ?? 0
+            let fixSamples = i64Val(result, col: 13, row: i) ?? 0
+            let boostSamples = i64Val(result, col: 14, row: i) ?? 0
+            let gapCount = i64Val(result, col: 15, row: i) ?? 0
+            let gapDurationMs = i64Val(result, col: 16, row: i) ?? 0
+            let maxGapMs = i64Val(result, col: 17, row: i)
+            let vehicleID = strVal(result, col: 18, row: i)
+            let deviceID = strVal(result, col: 19, row: i)
+
+            var snapshot = TripSnapshot(
+                id: bootId,
+                tripId: tripId,
+                startedAt: startDate,
+                endedAt: endDate ?? startDate.addingTimeInterval(durationS),
+                durationSeconds: durationS,
+                drivingSeconds: drivingS,
+                maxSpeedKph: maxGnssKph,
+                maxObdSpeedKph: maxObdKph,
+                maxRpm: maxRpm,
+                obdSamples: obdSamples,
+                gnssSamples: gnssSamples,
+                fixSamples: fixSamples,
+                boostSamples: boostSamples,
+                gapCount: gapCount,
+                gapDurationMs: gapDurationMs,
+                maxGapMs: maxGapMs,
+                legCount: legCount,
+                vehicleID: vehicleID,
+                deviceID: deviceID,
+                snapshotAt: Foundation.Date()
+            )
+            if let d = distanceM, d > 0 { snapshot.distanceMeters = d }
+            snapshots.append(snapshot)
+        }
+        enrich(&snapshots, conn)
+        return snapshots
+    }
+
+    /// Read trips from the older `drive_summary` table (backwards compat).
+    private func tripsFromDriveSummary(_ conn: Connection) throws -> [TripSnapshot] {
         let hasPosition = (try? conn.query("SELECT 1 FROM position LIMIT 1")) != nil
         let hasVehicle = hasColumn(conn, table: "drive_summary", column: "vehicle_id")
         let hasDevice = hasColumn(conn, table: "drive_summary", column: "device_id")
