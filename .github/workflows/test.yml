@@ -33,15 +33,20 @@ jobs:
       # CODE_SIGN_IDENTITY=- because an unsigned build dies in the Keychain with -34018.
       - name: xcodebuild test
         working-directory: CairnCompanion
+        # The runner is this Mac, not a fresh VM, so /tmp outlives a job: a result bundle
+        # left there by an earlier run made every later run fail before testing
+        # ("Existing file at -resultBundlePath", exit 64), from 2026-10-13. The job's own
+        # temp directory, cleared first, cannot collide.
         run: |
+          rm -rf "$RUNNER_TEMP/cairn-ui-tests.xcresult"
           xcodebuild test \
             -project CairnCompanion.xcodeproj -scheme CairnCompanion \
             -destination 'platform=iOS Simulator,name=iPhone 17' \
-            -resultBundlePath /tmp/cairn-ui-tests.xcresult \
+            -resultBundlePath "$RUNNER_TEMP/cairn-ui-tests.xcresult" \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_ALLOWED=YES
       - name: Keep the result bundle when it fails
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: ui-test-result
-          path: /tmp/cairn-ui-tests.xcresult
+          path: ${{ runner.temp }}/cairn-ui-tests.xcresult
