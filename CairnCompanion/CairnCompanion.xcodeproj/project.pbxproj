@@ -337,7 +337,7 @@
 				CAIRN_COMMIT = unknown;
 				CODE_SIGN_ENTITLEMENTS = App/CairnCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Cairn;
@@ -372,7 +372,7 @@
 				CAIRN_COMMIT = unknown;
 				CODE_SIGN_ENTITLEMENTS = App/CairnCompanion.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Cairn;
