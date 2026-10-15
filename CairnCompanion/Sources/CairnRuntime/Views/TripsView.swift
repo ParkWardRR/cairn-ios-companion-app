@@ -429,31 +429,42 @@ struct TripDetailView: View {
     @AppStorage(FuelEstimate.ethanolKey) private var ethanol = FuelEstimate.defaultEthanolPercent
     private var summary: TripSummary { TripSummary(entry: entry, ethanolPercent: ethanol) }
 
-    /// The answer to "what was this trip": the route, then the handful of numbers behind it.
+    /// The answer to "what was this trip": the route, stat bar, categorized insights, and fuel note.
     @ViewBuilder
     private var tripHeader: some View {
+        let trip = entry.serverTrip
+
         TripRouteMap(runs: summary.routeRuns)
+
+        // -- Stat bar: Driving / Stopped / Total / Distance / Max Speed --
         MetricGrid {
+            let drivingSec = trip?.drivingSeconds
+            Metric("Driving", formatDuration(drivingSec ?? summary.durationSeconds))
+            Metric("Stopped", stoppedText(total: summary.durationSeconds, driving: drivingSec))
+            Metric("Total", formatDuration(summary.durationSeconds))
+
             let distance = summary.distanceMeters.map { tripUnits.distanceParts(metres: $0) }
             Metric("Distance", distance?.value ?? "\u{2014}", unit: distance?.unit)
-            Metric("Duration", formatDuration(summary.durationSeconds))
-            let average = summary.averageSpeedKph.map { tripUnits.speedParts(kph: Double($0)) }
-            Metric("Average speed", average?.value ?? "\u{2014}", unit: average?.unit)
-            let top = summary.maxSpeedKph.map { tripUnits.speedParts(kph: Double($0)) }
-            Metric("Top speed", top?.value ?? "\u{2014}", unit: top?.unit)
+
+            let topKph = trip?.maxObdSpeedKph ?? summary.maxSpeedKph
+            let top = topKph.map { tripUnits.speedParts(kph: Double($0)) }
+            Metric("Max speed", top?.value ?? "\u{2014}", unit: top?.unit)
+
             if let fuel = summary.fuel {
                 let trip = tripUnits.economyParts(mpgUS: fuel.tripMpg)
                 Metric("Fuel economy", trip.value, unit: trip.unit)
-                if let cruise = fuel.cruiseMpg {
-                    let parts = tripUnits.economyParts(mpgUS: cruise)
-                    Metric("Cruising", parts.value, unit: parts.unit)
-                }
-                if let gallons = summary.fuelGallons {
-                    let used = tripUnits.volumeParts(gallonsUS: gallons)
-                    Metric("Fuel used", used.value, unit: used.unit)
-                }
             }
         }
+
+        // -- Drive insights --
+        driveInsights(trip)
+
+        // -- Performance insights --
+        performanceInsights(trip)
+
+        // -- Data Quality insights --
+        dataQualityInsights(trip)
+
         if let fuel = summary.fuel {
             Text("Economy is estimated from \(fuel.sampleCount) airflow readings at E\(fuel.ethanolPercent): the car's own fuel rate is not read. Set the blend in Settings.")
                 .font(.footnote).foregroundStyle(.secondary)
@@ -461,6 +472,114 @@ struct TripDetailView: View {
         if summary.isBench {
             Text("This looks like a bench test: no engine data and the dongle never reported driving.")
                 .font(.footnote).foregroundStyle(.secondary)
+        }
+    }
+
+    private func stoppedText(total: TimeInterval, driving: TimeInterval?) -> String {
+        guard let driving else { return "\u{2014}" }
+        let stopped = max(0, total - driving)
+        return formatDuration(stopped)
+    }
+
+    @ViewBuilder
+    private func driveInsights(_ trip: TripSnapshot?) -> some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 10) {
+                if let distance = summary.distanceMeters {
+                    insightRow("Distance", tripUnits.distanceText(metres: distance))
+                }
+                if let avg = summary.averageSpeedKph {
+                    insightRow("Average speed", tripUnits.speedText(kph: Double(avg)))
+                }
+                let topKph = trip?.maxObdSpeedKph ?? summary.maxSpeedKph
+                if let kph = topKph {
+                    insightRow("Top speed", tripUnits.speedText(kph: Double(kph)))
+                }
+                if let driving = trip?.drivingSeconds {
+                    let idle = max(0, summary.durationSeconds - driving)
+                    insightRow("Idle time", formatDuration(idle))
+                }
+                if let fuel = summary.fuel {
+                    if let cruise = fuel.cruiseMpg {
+                        insightRow("Cruising economy", tripUnits.economyText(mpgUS: cruise))
+                    }
+                    if let gallons = summary.fuelGallons {
+                        let vol = tripUnits.volumeParts(gallonsUS: gallons)
+                        insightRow("Fuel used", "\(vol.value) \(vol.unit)")
+                    }
+                }
+            }
+        } label: {
+            Label("Drive", systemImage: "car.fill")
+        }
+    }
+
+    @ViewBuilder
+    private func performanceInsights(_ trip: TripSnapshot?) -> some View {
+        let maxRpm = trip?.maxRpm ?? summary.maxSpeedKph.flatMap { _ in nil as Int? }
+        let boostCount = trip?.boostSamples ?? 0
+        if maxRpm != nil || boostCount > 0 {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    if let rpm = trip?.maxRpm {
+                        insightRow("Top RPM", "\(rpm)")
+                    }
+                    if boostCount > 0 {
+                        insightRow("Boost samples", "\(boostCount)")
+                    }
+                }
+            } label: {
+                Label("Performance", systemImage: "gauge.with.dots.needle.33percent")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func dataQualityInsights(_ trip: TripSnapshot?) -> some View {
+        if let trip {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 10) {
+                    if trip.gnssSamples > 0 {
+                        let fixRate = trip.fixSamples > 0
+                            ? Int((Double(trip.fixSamples) / Double(trip.gnssSamples) * 100).rounded())
+                            : 0
+                        insightRow("GPS fix rate", "\(fixRate)%",
+                                   tone: fixRate < 80 ? .warn : .neutral)
+                    }
+                    if trip.gapCount > 0 {
+                        HStack(spacing: 0) {
+                            insightRow("Gaps", "\(trip.gapCount) (\(formatDuration(trip.gnssGapSeconds)))")
+                            Spacer()
+                            Badge(text: "gaps", tone: .warn)
+                        }
+                    }
+                    if let maxGap = trip.maxGapMs, maxGap > 0 {
+                        insightRow("Longest gap", formatDuration(Double(maxGap) / 1000.0))
+                    }
+                    insightRow("OBD samples", "\(trip.obdSamples)")
+                    insightRow("GNSS samples", "\(trip.gnssSamples)")
+                    insightRow("Phone samples", "\(trip.phoneSamples)")
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Label("Data Quality", systemImage: "waveform.badge.magnifyingglass")
+                    if trip.gapCount > 0 {
+                        Badge(text: "\(trip.gapCount) gaps", tone: .warn)
+                    }
+                }
+            }
+        }
+    }
+
+    private func insightRow(_ label: String, _ value: String, tone: Tone = .neutral) -> some View {
+        HStack {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(tone == .neutral ? Color.primary : tone.color)
         }
     }
 
@@ -569,7 +688,7 @@ struct TripDetailView: View {
     private func serverSection(_ trip: TripSnapshot) -> some View {
         GroupBox("Server Trip") {
             VStack(alignment: .leading, spacing: 8) {
-                if trip.vehicleID != nil || trip.deviceID != nil {
+                if trip.vehicleID != nil || trip.deviceID != nil || trip.tripId != nil {
                     HStack(spacing: 12) {
                         if let vid = trip.vehicleID,
                            let vehicle = vehicles.first(where: { $0.id == vid }) {
@@ -585,13 +704,30 @@ struct TripDetailView: View {
                 }
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     tile("Duration", formatDuration(trip.durationSeconds))
-                    if let speed = trip.maxSpeedKph { tile("Max speed", tripUnits.speedText(kph: Double(speed))) }
+                    if let driving = trip.drivingSeconds {
+                        tile("Driving", formatDuration(driving))
+                    }
+                    if let legs = trip.legCount {
+                        tile("Legs", "\(legs)")
+                    }
+                    if let speed = trip.maxObdSpeedKph {
+                        tile("Max OBD speed", tripUnits.speedText(kph: Double(speed)))
+                    }
+                    if let speed = trip.maxSpeedKph {
+                        tile("Max GNSS speed", tripUnits.speedText(kph: Double(speed)))
+                    }
                     if let rpm = trip.maxRpm { tile("Max RPM", "\(rpm)") }
                     tile("OBD samples", "\(trip.obdSamples)")
                     tile("GNSS samples", "\(trip.gnssSamples)")
                     tile("Fix samples", "\(trip.fixSamples)")
+                    if trip.boostSamples > 0 {
+                        tile("Boost samples", "\(trip.boostSamples)")
+                    }
                     tile("Phone samples", "\(trip.phoneSamples)")
                     tile("GNSS gaps", "\(trip.gapCount) (\(formatDuration(trip.gnssGapSeconds)))")
+                    if let maxGap = trip.maxGapMs, maxGap > 0 {
+                        tile("Longest gap", formatDuration(Double(maxGap) / 1000.0))
+                    }
                 }
             }
             .padding(.top, 4)
