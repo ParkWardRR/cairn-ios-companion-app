@@ -203,6 +203,62 @@ struct LinkMachineTests {
         #expect(driver.machine.advice?.contains("ATT 5") == true)
     }
 
+    /// Measured on hardware on 2026-11-05 and the reason this test exists: the dongle was ready
+    /// at −77 dBm, went off air for a Wi-Fi slot, and the phone spent four minutes reporting
+    /// "no Cairn dongle answered the scan". The advice it offered was the signal one — re-cable
+    /// the car — because an RSSI was known, which it always is straight after a ready link. The
+    /// dongle was fine: the firmware tears its whole BLE stack down for a slot and advertises
+    /// nothing for up to `CAIRN_UPLINK_SLOT_MAX_MS`, four minutes, and the released BLE contract
+    /// has no field to say so. So the phone has to infer it, and the one thing it knows is that
+    /// it has been ready with this dongle before.
+    @Test("a dongle we have been ready with going quiet is a Wi-Fi slot, not a cabling job")
+    func quietAfterReadyIsAWiFiSlot() {
+        var driver = Driver()
+        driver.reachReady()
+        #expect(driver.state.name == "ready")
+
+        // It goes off air mid-slot, and nothing answers the rescan.
+        driver.send(.disconnected(dongle, nil, isReconnecting: false))
+        while driver.state.name != "backoff", driver.machine.nextDeadline != nil {
+            driver.tickAtDeadline()
+        }
+        #expect(driver.state.name == "backoff")
+
+        let advice = driver.machine.advice
+        #expect(advice?.contains("uploads over Wi-Fi") == true, "the likely reason comes first")
+        #expect(advice?.contains("nothing to do") == true, "and it asks nothing of the owner")
+        #expect(advice?.contains("extension cable") == false,
+                "−55 dBm is a healthy link: re-cabling the car is not the advice")
+    }
+
+    @Test("a weak signal is still worth saying, after the Wi-Fi slot")
+    func weakSignalIsStillMentioned() {
+        var driver = Driver()
+        driver.reachReady()
+        driver.send(.discovered(dongle, rssi: -84))
+        driver.send(.disconnected(dongle, nil, isReconnecting: false))
+        while driver.state.name != "backoff", driver.machine.nextDeadline != nil {
+            driver.tickAtDeadline()
+        }
+
+        let advice = driver.machine.advice
+        #expect(advice?.contains("uploads over Wi-Fi") == true, "still the likeliest reason")
+        #expect(advice?.contains("-84 dBm") == true, "but at −84 dBm the signal is worth saying too")
+        #expect(advice?.contains("extension cable") == true)
+    }
+
+    /// A phone that has never been ready with this dongle cannot assume a Wi-Fi slot: it has no
+    /// evidence the dongle exists at all, so the honest advice is the one about power.
+    @Test("with no dongle ever remembered, the advice is about power, not Wi-Fi")
+    func neverReadyAdviceIsAboutPower() {
+        var driver = Driver()
+        driver.send(.centralStateChanged(.poweredOn))
+        driver.send(.startRequested)
+        driver.tickAtDeadline()
+        #expect(driver.state.name == "backoff")
+        #expect(driver.machine.advice?.contains("powered") == true)
+    }
+
     @Test("a disconnect while securing is a pairing failure, and three of them ask the owner")
     func disconnectWhileSecuringIsPairingFailure() {
         var driver = Driver()

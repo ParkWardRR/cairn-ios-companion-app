@@ -21,4 +21,7 @@ before you run it, so the record can say how long that row took.
 
 | Record | Phase | Subject |
 |---|---|---|
-| _(none yet)_ | | |
+| [first-link-2026-11-05.md](first-link-2026-11-05.md) | — | First contact: pairing proven 5/5, but no session outlived 21 s |
+
+The first record is deliberately not an R1 one: R1 is still outstanding, because a link that
+drops every few seconds cannot have its pairing timed.

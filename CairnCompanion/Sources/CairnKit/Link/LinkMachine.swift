@@ -18,6 +18,10 @@ public struct LinkMachine: Sendable {
     /// How long to scan before admitting the dongle is not answering. The weak-link bench row
     /// ends here: `backoff` with the last signal shown, never `needsForget`.
     public static let scanWindow: TimeInterval = 20
+    /// Where the signal is worth mentioning beside a failure. Measured on this dongle: it joins
+    /// an access point at −66..−68 dBm and fails at −71..−72, and BLE held a ready link at
+    /// −77..−81, so this is "worth saying", not "the cause".
+    public static let weakRSSI = -70
     /// Discovery that never answers is a failure, not a state to live in.
     public static let discoveryDeadline: TimeInterval = 15
     /// How long the `PROTOCOL_VERSION` read may stay in flight. iOS pairs during this read, and
@@ -104,6 +108,25 @@ public struct LinkMachine: Sendable {
             }
             return failure.message
         case .backoff(_, let reason, _) where reason == .notFound:
+            // A dongle this phone has already been ready with has gone quiet, and by far the
+            // likeliest reason is that it took its radio off BLE to upload over Wi-Fi: the
+            // firmware tears the whole BLE stack down for a slot and does not advertise at all
+            // until it comes back, for up to four minutes (CAIRN_UPLINK_SLOT_MAX_MS). Nothing is
+            // wrong and nothing is asked of the owner, so say so first.
+            //
+            // The signal advice used to come first whenever an RSSI was known, which is always
+            // true straight after a ready link — so the one case where the dongle is certainly
+            // fine was the one case that got told to re-cable the car.
+            if storedIdentifier != nil {
+                var advice = "No answer yet. The dongle stops advertising while it uploads over "
+                    + "Wi-Fi — up to about 4 minutes — and this clears up by itself; nothing to do."
+                if let lastRSSI, lastRSSI <= Self.weakRSSI {
+                    advice += " It was also last heard at only \(lastRSSI) dBm, so if this keeps "
+                        + "happening the OBD extension cable is the fix for a dongle buried "
+                        + "under the dash."
+                }
+                return advice
+            }
             if let lastRSSI {
                 return "The dongle was last heard at \(lastRSSI) dBm. Below about −70 dBm it "
                     + "stops answering; the OBD extension cable is the fix for a dongle buried "

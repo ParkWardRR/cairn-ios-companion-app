@@ -44,11 +44,22 @@ Two things seen at that flash, worth knowing if a row behaves oddly:
    uploads. Write down the commit it prints: the bench record asks for it and the app cannot
    know it.
 
-2. **Serial log open, and kept.** The dongle's own `TTFF` line is half of R2's evidence and
-   there is no second chance at it.
+2. **Serial log open, and kept — opening it reboots the dongle.** The dongle's own `TTFF` line
+   is half of R2's evidence and there is no second chance at it.
    ```sh
    pio device monitor -b 115200 | tee ~/cairn-bench-$(date +%F).log
    ```
+   **Open it once, before anything else, and never close it.** Opening the port asserts
+   DTR/RTS, which is wired to the ESP32's reset, so **every** open power-cycles the dongle.
+   Measured on 2026-11-05: four captures, four different boot ids (`bdf996bb`, `66bd6cff`,
+   `d5fb5f41`, `ad69410a`), and deasserting DTR/RTS in pyserial *before* `open()` did not
+   avoid it. A reopen mid-run therefore resets the device under test: it voids every timing
+   row, and it destroys an R2 cold start, which is the one thing R2 exists to measure.
+
+   After a reset the dongle is **not discoverable for about 11 s** — `sensors_ready` at 7.9 s
+   then `boot: ble_advertising` at 10.7 s, from the boot banner. That is inside the app's 20 s
+   scan window, so a reboot row still passes; it is not inside 5 s, so do not read the "ready
+   again under 5 s" row as starting from the reset.
 
 3. **Install the app.** Xcode, the phone on the cable, Run. Check Settings on the phone shows a
    version, a channel and a commit — a build that cannot say what it is cannot be a bench
@@ -56,6 +67,33 @@ Two things seen at that flash, worth knowing if a row behaves oddly:
 
 4. **Allow location, and allow it as Always.** Without it the phone lends the receiver nothing
    and R2 measures nothing. The Dongle screen says which answer it got.
+
+## The dongle goes off air for up to four minutes, and the desk is the worst place for it
+
+Read this before you conclude anything is broken. A Wi-Fi uplink slot calls
+`ble_companion_radio_off()`, which **deinits the whole BLE stack**: the dongle drops the phone
+and advertises nothing at all until the slot ends, bounded by `CAIRN_UPLINK_SLOT_MAX_MS` —
+**240 s**. To the phone that is a `CBErrorDomain#6` timeout followed by minutes of
+`CairnLinkDomain#2 no Cairn dongle answered the scan`, which reads exactly like a dead dongle.
+
+`slot_blocker()` lets a slot start with a phone connected on purpose: the design is to send
+`ANNOUNCE_SLOT` first so the phone knows the disconnect is deliberate. **That announce is a
+no-op** — the field is not in the released BLE contract, so `uplink_runner.cpp` logs "the
+phone is not told", marks it announced and starts the slot anyway.
+
+A slot needs `parked` **and** `bundles_waiting > 0` **and** Wi-Fi configured **and** home
+known. A desk at home with a sealed bundle on the card is all four, so slots fire there
+repeatedly — while in a car away from home they would not. Measured on 2026-11-05: a
+4 min 11 s blackout (13:55:08→13:59:19) and a 3.4 s one, both from slots.
+
+So before timing any row, make one of those four conditions false. Nothing on the
+provisioning console does it — there is no Wi-Fi or uplink command — so the levers are a
+build with `CAIRN_WIFI_UPLINK` off (the `#else` branch retires the slot without touching the
+radio), or no bundle waiting. **Do not clear the bundle to get there**: R3 needs something to
+carry, and `0000000000JTKS18WK9BG4R9JD` is it.
+
+The app's own behaviour through a blackout is correct and is bench row 6: it backs off, keeps
+retrying, asks the owner nothing, and comes back ready by itself.
 
 ## Do the link rows before you set up a server
 
@@ -130,7 +168,17 @@ domain and the number the radio gave, not a sentence someone wrote:
 | `CairnLinkDomain#2` | nothing answered the scan. Check the dongle is powered and not in a Wi-Fi slot. |
 | `CairnLinkDomain#3` | the dongle is missing `GNSS_FIX` or `PROTOCOL_VERSION`. |
 | `CairnLinkDomain#7` | the link will take fewer than 28 B per write, after three re-measures. |
-| a failed subscription | the dongle's notify characteristics would not take a subscribe. Nobody has seen this yet, because the old app never looked. |
+| a failed subscription | the dongle's notify characteristics would not take a subscribe. Not seen on 2026-11-05: all four took one. |
+
+Before you work down that table, check it is not simply a Wi-Fi slot — see the section above.
+`CairnLinkDomain#2` for minutes on end, from a dongle that was ready a moment ago, is a slot
+far more often than it is a fault, and the app now says so in its advice.
+
+**Pairing itself was proven on 2026-11-05 and is not the suspect.** From the dongle's log:
+`companion connected` → `paired: encrypted=1 bonded=1` in **420 ms**, then `ATT MTU 185`. From
+the phone's: `securing` → `read PROTOCOL_VERSION 2 B` in **148 ms**, `ready` at **v1 ·
+OFFLOAD, DEVICE_INFO, 182 B writes**, all four subscribes accepted, `DEVICE_INFO` 139 B, and a
+second clean pair 38 s later at −81 dBm. See `first-link-2026-11-05.md`.
 
 Export the log either way. Firmware
 [#44](https://github.com/ParkWardRR/cairn-esp32-device-firmware/issues/44) has been open since
