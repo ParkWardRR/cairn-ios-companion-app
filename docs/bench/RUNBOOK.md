@@ -6,15 +6,43 @@ here is R1 and R2 of the front door's `docs/ios-rewrite-plan.md`.
 **One dongle, no spare.** Nothing below burns an eFuse or writes a partition table. Reflashing
 over USB is fine; back up NVS before anything that clears it.
 
+## What is on the dongle right now
+
+Flashed 2026-11-05 13:40, so the bench record's "firmware commit" blank is already answered:
+
+| | |
+|---|---|
+| Firmware | `Cairn cairn-v0.1.0 (beta), policy v1, commit 9ed19671321b6c04` |
+| Built | 2026-11-05 13:40:12, from a clean tree at `9ed1967` |
+| Replaced | `85158b3`, built 2026-10-26 |
+| Device id | `8777228e31648b23f6f783d28eee3e26` |
+| Storage | key version 1, **assigned**, counter high-water 175 |
+| NVS backup | `~/cairn-backups/nvs-20261105-134111.bin` |
+| Card | mounts, 15177 MiB total |
+| Bond | the existing one survived the flash — the pairing configuration did not change |
+| Server | **not enrolled**; uploads are refused with 403 until it is |
+
+Two things seen at that flash, worth knowing if a row behaves oddly:
+
+- The card threw `GO_IDLE_STATE failed` / `crc error` on the first reset and then mounted
+  cleanly on every boot after. The project's own check is two consecutive boots both
+  reporting `SD mounted`, which it passes — but suspect the contacts before you suspect the
+  code.
+- A sealed bundle is already waiting (`0000000000JTKS18WK9BG4R9JD`, sealed while recovering an
+  interrupted capture). There is something for R3 to carry when you get there.
+
 ## Before the dongle is plugged in
 
-1. **Flash.** `main` carries the phone-position-hint change (`fd3059e`). There is no OTA, so
-   this is the USB cable.
+1. **Flash** — *already done for `9ed1967`, see above; this is how, when you need it again.*
+   There is no OTA, so it is the USB cable. Use the project's own script rather than `pio`
+   directly: it backs up NVS first, and a lost storage root makes every sealed bundle on the
+   card unreadable.
    ```sh
-   cp include/secrets.h.example include/secrets.h   # or your own
-   pio run -e cairn -t upload
+   scripts/release-firmware.sh beta --flash /dev/cu.usbserial-10
    ```
-   Write down the commit you flashed. The bench record asks for it and the app cannot know it.
+   It refuses a dirty tree, runs the host suites, backs up NVS to `~/cairn-backups/`, then
+   uploads. Write down the commit it prints: the bench record asks for it and the app cannot
+   know it.
 
 2. **Serial log open, and kept.** The dongle's own `TTFF` line is half of R2's evidence and
    there is no second chance at it.
