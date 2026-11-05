@@ -72,9 +72,18 @@ Two things seen at that flash, worth knowing if a row behaves oddly:
 
 Read this before you conclude anything is broken. A Wi-Fi uplink slot calls
 `ble_companion_radio_off()`, which **deinits the whole BLE stack**: the dongle drops the phone
-and advertises nothing at all until the slot ends, bounded by `CAIRN_UPLINK_SLOT_MAX_MS` —
-**240 s**. To the phone that is a `CBErrorDomain#6` timeout followed by minutes of
-`CairnLinkDomain#2 no Cairn dongle answered the scan`, which reads exactly like a dead dongle.
+and advertises nothing at all until the slot ends. To the phone that is a `CBErrorDomain#6`
+timeout followed by `CairnLinkDomain#2 no Cairn dongle answered the scan`, which reads exactly
+like a dead dongle.
+
+**And it usually does not come back.** Measured 2026-11-05: the slots themselves are short
+(3.2–14.2 s, not the 240 s `CAIRN_UPLINK_SLOT_MAX_MS` allows), but afterwards the dongle logs
+`BLE stack reinited, advertising resumed` while actually advertising an **empty payload** — no
+name, no service UUID. The app scans filtered by the service UUID, so it can never match that,
+and the dongle is effectively off air until it is reset. That is firmware
+[#71](https://github.com/ParkWardRR/cairn-esp32-device-firmware/issues/71) and it is why a reset
+"fixed" the link every time on 2026-11-05. **Until #71 is fixed, a reset is the only way back,
+and the eight rows cannot be run at all once a slot has fired.**
 
 `slot_blocker()` lets a slot start with a phone connected on purpose: the design is to send
 `ANNOUNCE_SLOT` first so the phone knows the disconnect is deliberate. **That announce is a

@@ -69,16 +69,22 @@ The app's response is correct throughout — it retries, backs off to a 15 s cei
 attempt 7, and never asks the owner for anything — but a link with a 20 s ceiling carries no
 trips.
 
-**Cause not established.** Two candidates, in order:
+**Cause not established**, and interleaving the two logs rules out the obvious one: of the six
+`reason 520` disconnects, **only one coincided with a Wi-Fi slot**. Pairing succeeded on every
+attempt. So this is its own fault, not a side effect of the slot problem below. Candidates:
 
-1. **Signal.** The whole run sat at **−77 to −81 dBm** at desk range, which is well past where
-   this dongle has been measured to fail elsewhere (it joins an access point at −66..−68 and
-   fails at −71..−72). Supervision timeouts are what a marginal link produces. The dongle is on
-   a USB cable behind a Mac; move it into the open before concluding anything else.
-2. **Stale GATT handles.** `ble_companion_radio_on()` rebuilds the GATT server after a Wi-Fi
-   slot, which reassigns handles, and the firmware's table has no Service Changed
-   characteristic to tell a bonded central to re-read them. `CBATTErrorDomain#1` is what that
-   looks like. Seen once, so this is a hypothesis, not a finding.
+1. **Signal.** The run sat at −77..−81 dBm from the phone and −78/−82/−87 from the Mac at desk
+   range, which is past where this dongle has been measured to fail elsewhere (it joins an
+   access point at −66..−68 and fails at −71..−72). Supervision timeouts are what a marginal link
+   produces. Worth ruling out first because it is free: move the dongle off the USB hub into
+   clear air. Treat the numbers with some caution though — several raw readings came back as
+   `rssi 127`, which is CoreBluetooth's "unavailable" marker, not a measurement.
+2. **Connection parameters.** The firmware sets none at all, so the link runs on whatever iOS
+   proposes and the device never asks for anything roomier.
+
+What is *not* a candidate any more: stale GATT handles. A link that dies 1.7 s after a successful
+pair, repeatedly, is not an attribute-handle problem — and the one `CBATTErrorDomain#1` that
+suggested it is better explained by #71.
 
 The firmware sets no connection parameters at all — no `updateConnParams`, no supervision
 timeout — so the link runs on whatever iOS proposes. Worth knowing before tuning anything.
@@ -141,12 +147,25 @@ plausible-looking fix for a real failure can still be the wrong one.
 
 ## Two more things found, neither of them the link
 
-- **A Wi-Fi slot takes the dongle off air for up to four minutes**, advertising nothing, and the
-  `ANNOUNCE_SLOT` that is supposed to warn the phone is a no-op because the field is not in the
-  released contract. One blackout of 4 min 11 s was measured. The phone can only report "no
-  Cairn dongle answered the scan", which reads as a dead dongle. Details and the bench
-  workaround are in [RUNBOOK.md](RUNBOOK.md); the app's advice now leads with this instead of
-  telling the owner to re-cable the car.
+- **The dongle does not come back from a Wi-Fi slot.** This started as "a slot takes it off air
+  for up to `CAIRN_UPLINK_SLOT_MAX_MS`, four minutes" — which is what the config allows and is
+  **not** what happens. The slots measured were 3.2 to 14.2 s. What produced the 4 min 11 s
+  blackout is that after a slot the dongle logs `BLE stack reinited, advertising resumed` and
+  then advertises an **empty payload**: a Mac scan dumping the whole advertisement got nothing
+  but `kCBAdvDataIsConnectable`, with no local name and no service UUID. Since the app scans
+  filtered by the service UUID, a fresh phone can never match it. `ble_companion_radio_on()`
+  re-inits the host but never rebuilds the GATT server or the advertising payload, which is
+  precisely what `build_gatt_and_advertise()` exists for and is not called on that path.
+  Firmware [#71](https://github.com/ParkWardRR/cairn-esp32-device-firmware/issues/71), and the
+  likely root cause of the whole day. A reset fixed it every single time.
+- Separately, the `ANNOUNCE_SLOT` meant to warn the phone before a slot is a no-op because the
+  field is not in the released contract (firmware
+  [#69](https://github.com/ParkWardRR/cairn-esp32-device-firmware/issues/69)), so even a correct
+  3-second slot arrives at the phone as an unexplained drop. The app's advice now leads with
+  that rather than telling the owner to re-cable the car.
+- And the slots come in **pairs with BLE up for about 60 ms between them** —
+  `deinit → reinit → deinit` at 28.336 s / 28.396 s and three more times. Any central that
+  connects in that window is killed for nothing.
 - **A receipt on the card fails to decode on every boot:**
   `[PRUNE] ERROR receipt does not decode: malformed` and `[OFFLOAD] ERROR receipt for
   0000000000WP23ZA2Z3FB7KSKZ is malformed or does not verify (RECEIPT_MALFORMED)`. The phone was
