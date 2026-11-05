@@ -46,12 +46,28 @@ or the network is a thin adapter behind a protocol.
 - **Built is not Proven.** A phase closes on a bench record in `docs/bench/` with the date, the
   firmware commit, the app build number and the numbers the plan asks for — never on a green CI
   run.
+- **Decisions live in `CairnKit`, adapters hold none.** `CoreBluetoothCentral` translates and
+  nothing else; `OffloadRunner` talks and `OffloadMachine` decides. When a bench row behaves
+  differently on hardware than in CI, that split is what says where to look.
+- **A receipt is written before the dongle is asked to take it.** Between the server committing
+  and the dongle verifying, a trip exists in two places and is owned by neither. A phone that
+  dies in that window and forgets the receipt makes the dongle keep the trip forever.
 
 ### Screens
 
-`Dongle` (link state, signal, MTU, firmware version, capability bits, last error with its own
-numeric code, Retry / Forget / Export Log) and `Settings` (build identity, channel, export log).
-Trips arrive in R4; Garage, CarPlay and the in-app dashboard in R5.
+`Dongle` (link state, signal, write length, firmware version, capability bits, the receiver
+timeline, what is waiting for the server, the last error with its own numeric code, Retry /
+Forget / Export Log), `Trips` (grouped by day, with a route map on the detail screen) and
+`Settings` (build identity, channel, export log). Garage, CarPlay and the in-app dashboard
+arrive in R5.
+
+### Where the phases got to
+
+R0–R4 are **built**; **nothing is Proven** and `docs/bench/` is empty, because there is no
+dongle and no server on this Mac. Three things wait on the owner: a contracts tag (three
+additive changes sit on the front door's `main` untagged), the firmware flash for R2
+([firmware #67](https://github.com/ParkWardRR/cairn-esp32-device-firmware/pull/67)), and
+accepting the Apple Program License Agreement so a TestFlight export can be signed.
 
 ## Contracts
 

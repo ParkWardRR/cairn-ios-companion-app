@@ -20,7 +20,7 @@
   <a href="https://github.com/ParkWardRR/cairn-ios-companion-app/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/ParkWardRR/cairn-ios-companion-app/test.yml?style=flat-square&label=tests" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Blue_Oak_1.0.0-2E86C1?style=flat-square" alt="Blue Oak Model License 1.0.0"></a>
   <img src="https://img.shields.io/badge/platform-iOS_18+-2E86C1?style=flat-square" alt="iOS 18 and later">
-  <img src="https://img.shields.io/badge/rewrite-R0-E67E22?style=flat-square" alt="Rewrite phase R0">
+  <img src="https://img.shields.io/badge/rewrite-R4_built-E67E22?style=flat-square" alt="Rewrite phases R0 to R4 built">
 </p>
 
 > **This app is being rebuilt from scratch.** The first one is kept at tag
@@ -52,17 +52,34 @@ own server holds the history and a web dashboard shows it. This app does three j
 | Phase | What it adds | State |
 |---|---|---|
 | **R0** | Four targets, the kept codecs with their tests, two screens, build number from the commit count | Built |
-| R1 | `LinkMachine`: a BLE link that pairs every time, and a Dongle screen that can say what it saw | — |
-| R2 | GPS priming — time and position hints — and streaming that survives a locked phone | — |
-| R3 | Enrol with the server, relay bundles, carry the receipt back | — |
-| R4 | Sync engine, trips list and detail, the route map | — |
+| **R1** | `LinkMachine`: a BLE link that pairs every time, and a Dongle screen that can say what it saw | Built |
+| **R2** | GPS priming — time and position hints — and streaming that survives a locked phone | Built (app); firmware waiting on a flash |
+| **R3** | Enrol with the server, relay bundles, carry the receipt back | Built |
+| **R4** | Sync engine, trips list and detail, the route map | Built |
 | R5 | Garage, CarPlay, the in-app dashboard, several dongles | — |
 | R6 | The enrolled-challenge handshake, once firmware #5 lands | — |
 
 **Built** means it compiles and its tests pass. **Proven** means the dongle and the phone did it
 and a bench record under [`docs/bench/`](docs/bench) says so, with the date, the firmware commit,
 the app build number and the numbers. A green CI run is not a proof of anything that involves a
-radio.
+radio — and **nothing here is Proven yet**: `docs/bench/` is empty.
+
+## The three screens
+
+**Dongle.** What the link is doing and why it is not doing better: state with time-in-state,
+signal, write length, protocol version, capability bits, the firmware version, which
+characteristics this firmware actually exposes and when each was last heard, the receiver
+timeline (link ready → clock hint → position hint → first 2D → first 3D, in seconds), what is
+waiting to be carried to the server, the last error **with the number the radio gave it**, and
+Retry / Forget / Export Log. Diagnostics are the first interface on purpose: firmware
+[#44](https://github.com/ParkWardRR/cairn-esp32-device-firmware/issues/44) has been open since
+2026-10-10 waiting for a second central to say what it saw.
+
+**Trips.** Every drive the server has published, grouped by day, with a route map on the detail
+screen. One row per *outing*, not one per published record — a trip's identity moves, and a list
+keyed on it alone shows the same drive twice.
+
+**Settings.** What this build is, and the log it wrote.
 
 ## How it is put together
 
