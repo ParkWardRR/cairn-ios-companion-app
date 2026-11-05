@@ -100,7 +100,12 @@ public struct LinkMachine: Sendable {
     public var advice: String? {
         switch state {
         case .needsForget(let failure):
-            if failure.isAuthentication || failure == .pairingRefused {
+            // Every way the bond can disagree earns the same instruction, because there is only
+            // one fix and the app cannot apply it. `CB 15` and `CB 14` used to fall through to
+            // `failure.message` — "Failed to encrypt the connection" — which tells the owner
+            // what went wrong and nothing about what to do.
+            if failure.isAuthentication || failure == .pairingRefused
+                || failure.isEncryptionFailure || failure.isPeerRemovedPairing {
                 return "Open Settings › Bluetooth, tap the ⓘ beside Cairn and choose "
                     + "\"Forget This Device\", then come back and tap Retry. The dongle no longer "
                     + "holds the key this phone is offering (\(failure.shortCode)), and an app "
@@ -260,9 +265,25 @@ public struct LinkMachine: Sendable {
         case .failedToConnect(let peripheral, let failure):
             guard state.peripheral == peripheral else { return [] }
             directAttempts += 1
-            return backoff(failure ?? LinkFailure(domain: LinkFailure.cbDomain,
-                                                  code: LinkFailure.CB.connectionFailed.rawValue,
-                                                  message: "the connection failed"), now: now)
+            let failure = failure ?? LinkFailure(domain: LinkFailure.cbDomain,
+                                                 code: LinkFailure.CB.connectionFailed.rawValue,
+                                                 message: "the connection failed")
+            // `CBErrorDomain#15` is iOS saying it could not encrypt the link with the key it
+            // holds, and `#14` is iOS saying the dongle no longer recognises that key. Both are
+            // the bond disagreeing, which is the one failure an app cannot fix: only the owner
+            // can delete an iOS pairing. Counting them is what eventually reaches `needsForget`
+            // and tells them so.
+            //
+            // Measured 2026-11-05: the dongle dropped its half of the bond and the phone then
+            // logged `#15` on attempt after attempt, backing off to the 15 s ceiling for as long
+            // as it was left running and never once naming the fix. `isEncryptionFailure` was
+            // already written for exactly this and nothing consulted it — the bench matrix's
+            // "Dongle stale" row passes against `FakeCentral` because the fake reports it as a
+            // disconnect while securing, and the radio reports it as a failure to connect.
+            if failure.isEncryptionFailure || failure.isPeerRemovedPairing {
+                return pairingFailed(failure, now: now)
+            }
+            return backoff(failure, now: now)
 
         case .disconnected(let peripheral, let failure, let isReconnecting):
             return disconnected(peripheral, failure, isReconnecting: isReconnecting, now: now)
@@ -329,6 +350,15 @@ public struct LinkMachine: Sendable {
         _ peripheral: PeripheralRef, _ failure: LinkFailure?, isReconnecting: Bool, now: Date
     ) -> [LinkEffect] {
         guard state.peripheral == peripheral else { return [] }
+
+        // An encryption failure, or iOS reporting the peer has dropped our keys, is the bond
+        // disagreeing — whatever state it arrives in. Measured on hardware it arrives in
+        // `discovering` as often as in `securing`, because iOS encrypts a bonded link before
+        // handing over the service list, not at the version read. Counted wherever it lands, or
+        // a stale bond is an endless backoff that never names the fix.
+        if let failure, failure.isEncryptionFailure || failure.isPeerRemovedPairing {
+            return pairingFailed(failure, now: now)
+        }
 
         // A disconnect while securing, soon after connecting, is a pairing failure. This is how
         // the dongle's own "pairing failed, disconnecting" arrives at a central: the firmware

@@ -33,6 +33,14 @@ public final class FakeCentral: Central, OffloadLinkProvider {
         /// The read comes back refused and keeps coming back refused: iOS is offering a key this
         /// dongle no longer holds.
         case refusesRead(LinkFailure)
+        /// The connect itself fails to encrypt, so there is no read to refuse.
+        ///
+        /// This is the shape the radio actually produced on 2026-11-05 once the dongle's half of
+        /// the bond was gone: `CBErrorDomain#15`, or `#14`, on `connect` — iOS encrypts a bonded
+        /// link before it will hand over the service list, so the failure lands long before
+        /// `PROTOCOL_VERSION`. Modelled separately from `refusesRead` because the two arrive down
+        /// different paths, and the bench matrix only ever exercised the other one.
+        case refusesToEncrypt(LinkFailure)
     }
 
     public struct Dongle: Sendable {
@@ -142,6 +150,12 @@ public final class FakeCentral: Central, OffloadLinkProvider {
             // A dongle that is not advertising never answers, and the connect has no timeout of
             // its own — which is the whole reason LinkMachine carries a 15 s deadline.
             guard dongle.isAdvertising else { return }
+            // iOS encrypts a bonded link before it hands anything over, so a bond the dongle no
+            // longer holds fails here rather than at the version read.
+            if case .refusesToEncrypt(let failure) = dongle.pairing {
+                queue.append(.failedToConnect(ref.id == dongle.ref.id ? dongle.ref : ref, failure))
+                return
+            }
             isConnected = true
             connectedRef = ref.id == dongle.ref.id ? dongle.ref : ref
             queue.append(.connected(connectedRef!))
@@ -196,6 +210,9 @@ public final class FakeCentral: Central, OffloadLinkProvider {
                 queue.append(.valueRead(.protocolVersion, dongle.versionPayload ?? dongle.version.data, nil))
             case .refusesRead(let failure):
                 queue.append(.valueRead(.protocolVersion, nil, failure))
+            case .refusesToEncrypt:
+                // Unreachable: the connect never completed, so there is nothing to read from.
+                break
             case .dropsLinkWhilePairing(_, let reason):
                 guard pairingDropsLeft > 0 else {
                     queue.append(.valueRead(.protocolVersion, dongle.versionPayload ?? dongle.version.data, nil))

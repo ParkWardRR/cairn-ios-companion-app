@@ -83,6 +83,45 @@ trips.
 The firmware sets no connection parameters at all — no `updateConnParams`, no supervision
 timeout — so the link runs on whatever iOS proposes. Worth knowing before tuning anything.
 
+## Then the bond went stale, and the app did the wrong thing
+
+Later in the same session the dongle's half of the bond stopped matching, and the link stopped
+getting as far as a read at all:
+
+```
+14:15:04.613 link connecting   connected C734EBB4
+14:15:05.289 link discovering  disconnected C734EBB4 (reconnecting): CBErrorDomain#6 …
+14:15:07.835 link connecting   failed to connect C734EBB4: CBErrorDomain#15 Failed to encrypt
+                               the connection, the connection has timed out unexpectedly.
+14:15:07.835 link backoff      → backoff · attempt 3, 4 s
+```
+
+That is the **Dongle stale** row, and the app failed it. It should reach `needsForget` within
+three attempts with advice naming Settings › Bluetooth › Forget This Device. Instead it backed off
+to its 15 s ceiling and kept going indefinitely, saying nothing useful.
+
+The reason is worth writing down, because the row's unit test passed the whole time:
+
+- The bench matrix modelled a stale bond as `refusesRead(ATT 5)` — the dongle refusing the
+  `PROTOCOL_VERSION` read. **The radio never does that.** iOS encrypts a bonded link *before* it
+  will hand over the service list, so the failure lands on `connect` as `CBErrorDomain#15`, long
+  before there is anything to read.
+- `LinkMachine` counted that as an ordinary connect failure, so `pairingFailures` stayed at zero
+  and `needsForget` was unreachable by that path.
+- `LinkFailure.isEncryptionFailure` had been written for exactly this case — and **nothing in the
+  app ever consulted it.**
+
+Fixed: `CB 15` and `CB 14` now count as pairing failures wherever they arrive — on a connect, and
+on a disconnect in any state, since on hardware they land in `discovering` as often as in
+`securing` — and both earn the advice that names the fix. `FakeCentral` gained a
+`refusesToEncrypt` mode so the bench matrix exercises the shape the radio produces, and two rows
+pin it.
+
+This is the sharpest lesson of the run: the fake was modelled on the firmware's behaviour, which
+was the right instinct, but the failure the *central* sees is not the failure the *peripheral*
+logs. A row that passes green against a fake it shares a mental model with proves less than it
+looks like it does.
+
 ## Two more things found, neither of them the link
 
 - **A Wi-Fi slot takes the dongle off air for up to four minutes**, advertising nothing, and the

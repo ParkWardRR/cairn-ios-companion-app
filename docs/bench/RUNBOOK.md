@@ -119,7 +119,7 @@ row* took. Each row runs **twice**; a row passes when both runs do.
 | Dongle reboot | power-cycle the dongle while the app says ready | ready again under 5 s |
 | App killed | swipe the app away | iOS relaunches it; ready under 10 s |
 | Phone stale | forget Cairn in iOS Settings, leave the dongle's bond alone | the firmware drops its bond on `PINKEY_MISSING`; ready after one retry |
-| Dongle stale | `CLEAR bonds` on the dongle, leave the phone's bond alone | `needsForget` within 3 attempts, and the message names the fix |
+| Dongle stale | `CLEAR bonds` on the dongle, leave the phone's bond alone | `needsForget` within 3 attempts, and the message names the fix — expect `CB 15`, not `ATT 5` |
 | Wi-Fi slot | make the dongle drop BLE | backoff, then ready when it comes back, with nothing asked of you |
 | Locked phone | lock the phone while ready, then reboot the dongle | ready again with the screen off |
 | Weak link | dongle 10 m away behind a wall | discovery fails, backoff with the signal shown, **never** `needsForget` |
@@ -162,6 +162,7 @@ domain and the number the radio gave, not a sentence someone wrote:
 | What you see | What it means |
 |---|---|
 | `ATT 5` / `ATT 15` | iOS offered a key this dongle will not accept. Forget Cairn in Settings › Bluetooth. |
+| `CB 15` | iOS could not encrypt the link with the key it holds. The same fix, and **this is the one the hardware actually produces** for a stale bond — it lands on the connect, before any read. |
 | `CB 14` | iOS says the dongle forgot this phone. The firmware drops its own bond on this and the next try should be clean. |
 | `needsForget` with advice | three pairing failures in a row; the advice names the fix. |
 | `CairnLinkDomain#1` | the connect did not complete in 15 s — it went back to scanning. |
