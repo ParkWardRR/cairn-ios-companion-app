@@ -42,45 +42,6 @@ public enum LinkHealth {
     }
 }
 
-public enum LinkEventKind: String, Codable, Sendable, Equatable {
-    case armed, disarmed
-    case bluetoothUnavailable
-    case ready
-    /// The link went away (disconnect, failed connect, radio off, or a post-link retry).
-    case dropped
-    case failed
-    case streamingLost, streamingResumed
-}
-
-public struct LinkEvent: Codable, Sendable, Equatable {
-    public let at: Date
-    public let kind: LinkEventKind
-    public let detail: String?
-
-    public init(at: Date, kind: LinkEventKind, detail: String? = nil) {
-        self.at = at
-        self.kind = kind
-        self.detail = detail
-    }
-}
-
-/// A capped record of link transitions, newest last. Feeds the status timeline in the UI and, later, drive history.
-public struct LinkEventLog: Sendable, Equatable {
-    public static let capacity = 200
-
-    public private(set) var events: [LinkEvent] = []
-
-    public init() {}
-
-    public mutating func append(_ event: LinkEvent) {
-        events.append(event)
-        if events.count > Self.capacity { events.removeFirst(events.count - Self.capacity) }
-    }
-
-    public mutating func removeAll() { events.removeAll() }
-
-    /// Drops since the app was last armed. `removeAll` on disarm resets it.
-    public var dropCount: Int { events.lazy.filter { $0.kind == .dropped }.count }
-
-    public var lastDrop: Date? { events.last { $0.kind == .dropped }?.at }
-}
+// LinkEventKind, LinkEvent and LinkEventLog lived here. LinkLog replaced them: the same ring,
+// but every entry carries the state it happened in and a failure carries its own numeric code,
+// which is what firmware #44 has been waiting for. See CairnKit/Link/LinkLog.swift.

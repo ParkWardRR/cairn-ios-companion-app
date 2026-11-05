@@ -35,5 +35,9 @@ let package = Package(
             "CairnKit",
             .product(name: "GRDB", package: "GRDB.swift"),
         ]),
+        // Small on purpose: the adapters hold no rules, so there is little here to test. What it
+        // does cover is the one way an adapter can be silently wrong — a constant that CairnKit
+        // spells out by hand, because it imports no Apple framework, drifting from the framework.
+        .testTarget(name: "CairnRuntimeTests", dependencies: ["CairnRuntime"]),
     ]
 )

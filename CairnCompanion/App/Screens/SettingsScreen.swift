@@ -30,31 +30,21 @@ struct SettingsScreen: View {
 
                 Section {
                     Button("Export Log", systemImage: "square.and.arrow.up") {
-                        model.log.flush()
+                        model.driveLog.flush()
                         exporting = true
                     }
                 } footer: {
-                    Text("Every link transition, with its timestamp and its error code. "
-                         + "It is also in the Files app under On My iPhone › Cairn.")
+                    Text("Every link transition this build has written, with its timestamp and "
+                         + "its error code, across relaunches. It is also in the Files app under "
+                         + "On My iPhone › Cairn. The Dongle screen's Export Log is the current "
+                         + "link only, with the dongle named at the top.")
                 }
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $exporting) {
-                ShareSheet(items: [model.log.fileURL])
+                ShareSheet(items: [model.driveLog.fileURL])
             }
         }
     }
 }
 
-/// `UIActivityViewController` as a sheet. SwiftUI's `ShareLink` would do, but the log is a file
-/// that may not exist yet on a build that has never connected, and this way the sheet opens and
-/// says so rather than the button being disabled with no explanation.
-private struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}

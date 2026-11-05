@@ -17,6 +17,13 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Dongle"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.navigationBars["Dongle"].waitForExistence(timeout: 5))
 
+        // The Dongle screen's controls must be reachable even with no radio: a simulator's
+        // central never leaves `off`, and a diagnostics screen you cannot use when nothing works
+        // is a diagnostics screen for nothing.
+        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Forget This Dongle"].exists)
+        XCTAssertTrue(app.buttons["Export Log"].firstMatch.exists)
+
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
 

@@ -41,32 +41,4 @@ private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
     }
 }
 
-@Suite struct LinkEventLogTests {
-    @Test func countsDropsAndFindsTheLast() {
-        var log = LinkEventLog()
-        log.append(.init(at: t0, kind: .ready))
-        log.append(.init(at: t0.addingTimeInterval(10), kind: .dropped))
-        log.append(.init(at: t0.addingTimeInterval(20), kind: .ready))
-        log.append(.init(at: t0.addingTimeInterval(30), kind: .dropped))
-        #expect(log.dropCount == 2)
-        #expect(log.lastDrop == t0.addingTimeInterval(30))
-    }
-
-    @Test func capsAtCapacityKeepingTheNewest() {
-        var log = LinkEventLog()
-        for i in 0..<(LinkEventLog.capacity + 25) {
-            log.append(.init(at: t0.addingTimeInterval(Double(i)), kind: .streamingResumed))
-        }
-        #expect(log.events.count == LinkEventLog.capacity)
-        #expect(log.events.last?.at == t0.addingTimeInterval(Double(LinkEventLog.capacity + 24)))
-        #expect(log.events.first?.at == t0.addingTimeInterval(25))
-    }
-
-    @Test func removeAllResetsDrops() {
-        var log = LinkEventLog()
-        log.append(.init(at: t0, kind: .dropped))
-        log.removeAll()
-        #expect(log.dropCount == 0)
-        #expect(log.lastDrop == nil)
-    }
-}
+// The link event log moved to LinkLog, tested in LinkLogTests.
