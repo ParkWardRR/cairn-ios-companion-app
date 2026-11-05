@@ -32,6 +32,21 @@ public enum WriteOutcome: Equatable, Sendable {
     case backpressure
 }
 
+/// Hands out the offload conversation on an already-ready link.
+///
+/// Offload is the one thing that does not go through `LinkMachine`: it is a request/response
+/// protocol of its own over two characteristics (`ble/v1/offload.md`), with its own framing,
+/// sequencing and CRC, and `OffloadClient` already speaks it. What the link layer owes it is a
+/// `OffloadLink` bound to the connected peripheral, and the discipline of handing out only one
+/// at a time.
+@MainActor
+public protocol OffloadLinkProvider: AnyObject {
+    /// Nil unless the link is ready and this firmware exposes both offload characteristics.
+    /// Replaces any link handed out earlier, which is ended first.
+    func openOffloadLink() -> (any OffloadLink)?
+    func closeOffloadLink()
+}
+
 /// The only clock the link is allowed to read.
 ///
 /// Every deadline in `LinkMachine` and every cadence in `PrimingPolicy` is a `Date` comparison

@@ -20,7 +20,7 @@ import Foundation
 /// Events are queued rather than delivered inline: the supervisor is pumping when it calls
 /// `perform`, so a synchronous callback would re-enter it. `settle()` drains the queue.
 @MainActor
-public final class FakeCentral: Central {
+public final class FakeCentral: Central, OffloadLinkProvider {
     public var onEvent: (@MainActor (LinkEvent) -> Void)?
 
     /// How the dongle answers the `PROTOCOL_VERSION` read, which is where iOS pairs.
@@ -272,6 +272,13 @@ public final class FakeCentral: Central {
             message: "Authentication is insufficient."
         ))
     }
+
+    /// Always nil. The offload conversation has its own fake — a dongle that answers `LIST`,
+    /// `GET_MANIFEST`, `READ` and `PUT_RECEIPT` with real framing — and `OffloadRunnerTests`
+    /// drives `OffloadClient` against it directly, which is the same surface with none of this
+    /// one's scaffolding in the way.
+    public func openOffloadLink() -> (any OffloadLink)? { nil }
+    public func closeOffloadLink() {}
 
     public func effect(matching predicate: (LinkEffect) -> Bool) -> LinkEffect? {
         effects.first(where: predicate)

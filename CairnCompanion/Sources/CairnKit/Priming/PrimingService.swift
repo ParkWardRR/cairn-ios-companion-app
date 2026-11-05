@@ -35,8 +35,14 @@ public final class PrimingService {
         self.location = location
         self.clock = clock
 
-        link.onTransition = { [weak self] from, to in self?.linkChanged(from: from, to: to) }
-        link.onNotify = { [weak self] characteristic, data in self?.received(characteristic, data) }
+        // The app may route these itself when more than one thing follows the link (offload
+        // does too), so they are only claimed when nobody else has.
+        if link.onTransition == nil {
+            link.onTransition = { [weak self] from, to in self?.linkChanged(from: from, to: to) }
+        }
+        if link.onNotify == nil {
+            link.onNotify = { [weak self] characteristic, data in self?.received(characteristic, data) }
+        }
         location.onFix = { [weak self] _ in self?.pump() }
 
         // A link that is already ready when this is built — a relaunch by iOS for the dongle,
@@ -72,7 +78,9 @@ public final class PrimingService {
 
     // MARK: - Events
 
-    private func linkChanged(from: LinkState, to: LinkState) {
+    /// The link moved. Public because more than one thing follows it and the app wires
+    /// them in one place; `PrimingService` claims the hook only when nothing else has.
+    public func linkChanged(from: LinkState, to: LinkState) {
         switch to {
         case .ready(let ready):
             // A link reports `ready` before `maximumWriteValueLength` has settled, so the
@@ -102,7 +110,8 @@ public final class PrimingService {
         clock.wake("priming", at: nil) {}
     }
 
-    private func received(_ characteristic: CairnGATT.Characteristic, _ data: Data) {
+    /// A notification arrived. Public for the same reason as `linkChanged`.
+    public func received(_ characteristic: CairnGATT.Characteristic, _ data: Data) {
         switch characteristic {
         case .gnssQuality:
             guard let decoded = PayloadDecoder.gnssQuality(data) else { return }

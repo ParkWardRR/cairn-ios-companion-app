@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		010AB516EFBEAE671DE70836 /* CairnCompanionApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D2157BE912A13ED0200C6E9 /* CairnCompanionApp.swift */; };
 		186156F07FC6ED7B408FA2FB /* SmokeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0D7E121030DB34A00ADCC88 /* SmokeTests.swift */; };
+		28E3C0BCA9EDD167833481EE /* EnrolmentScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D780F418B8385CBB3E5DD7D6 /* EnrolmentScreen.swift */; };
 		47BF4F4C744E6DEAF13A30DD /* DongleScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2DBD3A5C84C8F65380570B33 /* DongleScreen.swift */; };
 		49C8AA998882F97D98D9C1A2 /* CairnRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = 8194D8111923C50345AEDD47 /* CairnRuntime */; };
 		6F3355177F130FE3845FA40C /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 814985E13699BDF8B938F813 /* AppModel.swift */; };
@@ -41,6 +42,7 @@
 		A0D7E121030DB34A00ADCC88 /* SmokeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SmokeTests.swift; sourceTree = "<group>"; };
 		B7811B58B2EA0A9C1DDAF201 /* CairnCompanionUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CairnCompanionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CB371EDA615C2376801123BF /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		D780F418B8385CBB3E5DD7D6 /* EnrolmentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrolmentScreen.swift; sourceTree = "<group>"; };
 		F25C8E5071A70524FB14CEF0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		FCF05D9B75AF694FB08315A9 /* CairnCompanion.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CairnCompanion.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -61,6 +63,7 @@
 			isa = PBXGroup;
 			children = (
 				2DBD3A5C84C8F65380570B33 /* DongleScreen.swift */,
+				D780F418B8385CBB3E5DD7D6 /* EnrolmentScreen.swift */,
 				779A5528740B797DA8BEDE7C /* SettingsScreen.swift */,
 			);
 			path = Screens;
@@ -237,6 +240,7 @@
 				6F3355177F130FE3845FA40C /* AppModel.swift in Sources */,
 				010AB516EFBEAE671DE70836 /* CairnCompanionApp.swift in Sources */,
 				47BF4F4C744E6DEAF13A30DD /* DongleScreen.swift in Sources */,
+				28E3C0BCA9EDD167833481EE /* EnrolmentScreen.swift in Sources */,
 				96720DF8F64D3CBA5E41B247 /* RootScreen.swift in Sources */,
 				DC4A6F20FEA4CF452F378787 /* SettingsScreen.swift in Sources */,
 			);
@@ -328,6 +332,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Cairn connects to your Cairn dongle over Bluetooth to prime its GPS receiver and collect finished drives.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Cairn reads the QR code your server shows, to set this phone up with it.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Cairn keeps sending your phone's position to the dongle while you drive, with the screen off.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Cairn sends your phone's position to the dongle so its receiver finds the sky faster.";
 				INFOPLIST_KEY_UILaunchScreen_BackgroundColor = LaunchBackground;
@@ -361,6 +366,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.travel";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Cairn connects to your Cairn dongle over Bluetooth to prime its GPS receiver and collect finished drives.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Cairn reads the QR code your server shows, to set this phone up with it.";
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Cairn keeps sending your phone's position to the dongle while you drive, with the screen off.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Cairn sends your phone's position to the dongle so its receiver finds the sky faster.";
 				INFOPLIST_KEY_UILaunchScreen_BackgroundColor = LaunchBackground;

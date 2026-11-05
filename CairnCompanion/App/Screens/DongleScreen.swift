@@ -14,9 +14,11 @@ struct DongleScreen: View {
     @Environment(AppModel.self) private var model
     @State private var now = Date()
     @State private var sharing: SharePayload?
+    @State private var enrolling = false
 
     private var link: LinkSupervisor { model.link }
     private var priming: PrimingService { model.priming }
+    private var offload: OffloadCoordinator { model.offload }
 
     var body: some View {
         NavigationStack {
@@ -25,6 +27,7 @@ struct DongleScreen: View {
                 if let advice = link.advice { adviceSection(advice) }
                 if let ready = link.ready { dongleSection(ready) } else { signalSection }
                 if link.ready != nil { receiverSection }
+                offloadSection
                 locationSection
                 if !link.subscriptionFailures.isEmpty { subscriptionSection }
                 controlsSection
@@ -43,6 +46,10 @@ struct DongleScreen: View {
             }
             .sheet(item: $sharing) { payload in
                 ShareSheet(items: [payload.url])
+            }
+            .sheet(isPresented: $enrolling) {
+                EnrolmentScreen()
+                    .environment(model)
             }
         }
     }
@@ -179,6 +186,61 @@ struct DongleScreen: View {
         } footer: {
             Text("Seconds since the link came up. The dongle logs its own time-to-first-fix line "
                  + "per receiver start; these two are meant to be read together.")
+        }
+    }
+
+    /// "3 trips waiting on the dongle" / "uploading 2 of 5" / "all synced", the last receipt,
+    /// and the stop reason in plain words.
+    ///
+    /// Offload is the only job here that can leave a trip stranded: the dongle will not free
+    /// the space until a server-signed receipt comes back, so a run that stops silently is a
+    /// card that fills up. Every stop has a sentence, and the ones the person has to act on say
+    /// what to do.
+    private var offloadSection: some View {
+        Section {
+            if !model.server.isEnrolled {
+                Button("Set Up a Server", systemImage: "externaldrive.badge.plus") { enrolling = true }
+                Text(model.server.statusLine)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                HStack {
+                    Text(offload.summary.headline).font(.headline)
+                    Spacer()
+                    if offload.isRunning { ProgressView() }
+                }
+                LabeledContent("Server", value: model.server.statusLine)
+                if let receipt = offload.summary.lastReceiptAt {
+                    LabeledContent("Last receipt", value: LinkHealth.ageLabel(now.timeIntervalSince(receipt)) + " ago")
+                }
+                if offload.summary.bytesUploaded > 0 {
+                    LabeledContent("Carried") {
+                        Text(ByteCountFormatter.string(fromByteCount: offload.summary.bytesUploaded, countStyle: .file))
+                            .font(.caption.monospacedDigit())
+                    }
+                }
+                if let stopped = offload.summary.stopped {
+                    Text(stopped.sentence)
+                        .font(.callout)
+                        .foregroundStyle(stopped.needsAttention ? Color.red : Color.secondary)
+                }
+                if !offload.rows.isEmpty {
+                    DisclosureGroup("Trips (\(offload.rows.count))") {
+                        ForEach(offload.rows.prefix(12)) { row in
+                            HStack {
+                                Text(String(row.bundleID.prefix(8)))
+                                    .font(.caption.monospaced())
+                                Spacer()
+                                Text(row.stopCode ?? row.stage.title)
+                                    .font(.caption)
+                                    .foregroundStyle(row.isStopped ? Color.red : Color.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Trips on the dongle")
         }
     }
 

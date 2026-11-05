@@ -4,6 +4,14 @@ import Foundation
 
 public actor CairnServerClient {
     private let transport: any HTTPTransport
+    /// Where chunk uploads go, when they go somewhere else.
+    ///
+    /// A chunk is the one request that may outlive the app: a drive leaves the phone locked in
+    /// a mount, iOS suspends what it likes, and a 64 KiB `PUT` handed to a background
+    /// `URLSession` finishes whether or not the app is still there (`sync/v1` §10). Everything
+    /// else is a short signed request that only makes sense in the foreground, because only the
+    /// foreground can reach the Secure Enclave to sign it.
+    private let chunkTransport: any HTTPTransport
     private let signer: any RequestSigner
     private let tokenStore: any BearerTokenStore
     private let clock: @Sendable () -> Int
@@ -13,10 +21,12 @@ public actor CairnServerClient {
         transport: any HTTPTransport,
         signer: any RequestSigner,
         tokenStore: any BearerTokenStore = InMemoryBearerTokenStore(),
+        chunkTransport: (any HTTPTransport)? = nil,
         clock: @escaping @Sendable () -> Int = { Int(Date().timeIntervalSince1970) },
         onRevoked: (@Sendable () async -> Void)? = nil
     ) {
         self.transport = transport
+        self.chunkTransport = chunkTransport ?? transport
         self.signer = signer
         self.tokenStore = tokenStore
         self.clock = clock
@@ -153,21 +163,46 @@ public actor CairnServerClient {
         return try decodeBody(response)
     }
 
+    /// A chunk, by bearer token when one is asked for.
+    ///
+    /// Chunks are the only thing that goes up by bearer, and that is the whole reason the token
+    /// exists: a background `URLSession` task is handed to the system and runs later, possibly
+    /// after the app is gone, and it cannot sign anything then because the Secure Enclave needs
+    /// the app alive. A one-hour token it can carry is the trade (`sync/v1` §2.3, §10).
+    ///
+    /// A token expires. The clock check below catches the ordinary case, and a 401 catches the
+    /// one it cannot — a token revoked, or a server restarted, mid-upload. One fresh token and
+    /// one retry; a second 401 is a real refusal and is raised.
     public func relayChunk(bundleID: String, sha256: String, data chunkData: Data, useBearer: Bool = false) async throws -> ChunkAck {
         let target = "/v1/relay/bundles/\(bundleID)/chunks/\(sha256)"
-        let request: HTTPRequest
-        if useBearer, let token = await tokenStore.load(), Date() < token.expiresAt {
-            request = HTTPRequest(
+
+        func bearerRequest(_ token: BearerToken) -> HTTPRequest {
+            HTTPRequest(
                 method: "PUT", target: target,
                 headers: ["Authorization": "Bearer \(token.token)", "Content-Type": "application/octet-stream"],
                 body: chunkData
             )
-        } else {
-            var r = try signedRequest(method: "PUT", target: target, body: chunkData)
-            r.headers["Content-Type"] = "application/octet-stream"
-            request = r
         }
-        let response = try await execute(request)
+
+        if useBearer, let token = await tokenStore.load(), Date() < token.expiresAt {
+            let response = try await execute(bearerRequest(token), over: chunkTransport)
+            if response.status != 401 { return try decode(response) }
+            await tokenStore.clear()
+            if let refreshed = try? await mintToken(),
+               let expires = ServerTimestamp.parse(refreshed.expiresAt) {
+                let retried = try await execute(
+                    bearerRequest(BearerToken(token: refreshed.token, expiresAt: expires)),
+                    over: chunkTransport
+                )
+                return try decode(retried)
+            }
+            // No token to be had: fall through to a signed request, which works while the app
+            // is in the foreground and is better than losing the chunk.
+        }
+
+        var signed = try signedRequest(method: "PUT", target: target, body: chunkData)
+        signed.headers["Content-Type"] = "application/octet-stream"
+        let response = try await execute(signed)
         return try decode(response)
     }
 
@@ -243,10 +278,12 @@ public actor CairnServerClient {
 
     // MARK: - Transport + classify
 
-    private func execute(_ request: HTTPRequest) async throws -> HTTPResponse {
+    private func execute(
+        _ request: HTTPRequest, over transport: (any HTTPTransport)? = nil
+    ) async throws -> HTTPResponse {
         let response: HTTPResponse
         do {
-            response = try await transport.send(request)
+            response = try await (transport ?? self.transport).send(request)
         } catch let error as HTTPTransportError {
             throw CairnServerError.transport(error.failure)
         } catch {
@@ -296,8 +333,18 @@ public actor CairnServerClient {
         case 422:
             return .quarantined
         case 429:
+            // Two different 429s with different meanings (`sync/v1` §13). `too_many_offers`
+            // says the data is fine and this client simply has too many bundles in flight;
+            // `rate_limited` says slow down. Collapsing them would make the first look like a
+            // server under load and the offload loop back off when it should commit.
+            if code == "too_many_offers" { return .tooManyOffers }
             let retryAfter = response.header("Retry-After").flatMap { TimeInterval($0) }
             return .rateLimited(retryAfter: retryAfter)
+        case 507:
+            // The server's relay answers 507 `quota_exceeded` when a device is out of its
+            // storage allowance. It is in the 5xx range and is not a server failure: retrying
+            // it with backoff, which is what the 5xx arm below would do, wastes a drive.
+            return .quotaExceeded
         case 500...599:
             return .serverFailure(status: response.status)
         default:

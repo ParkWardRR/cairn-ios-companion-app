@@ -66,6 +66,7 @@ targets:
         INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: Cairn connects to your Cairn dongle over Bluetooth to prime its GPS receiver and collect finished drives.
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Cairn sends your phone's position to the dongle so its receiver finds the sky faster.
         INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: Cairn keeps sending your phone's position to the dongle while you drive, with the screen off.
+        INFOPLIST_KEY_NSCameraUsageDescription: Cairn reads the QR code your server shows, to set this phone up with it.
     scheme:
       testTargets:
         - CairnCompanionUITests
@@ -82,10 +83,16 @@ targets:
         CairnChannel: $(CAIRN_CHANNEL)
         CairnCommit: $(CAIRN_COMMIT)
         UIBackgroundModes: [location, bluetooth-central]
-        # Goes away in R3, when the pinned CA becomes a trust anchor in the URLSession delegate,
-        # which ATS permits on its own.
-        NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
+        # No NSAppTransportSecurity exception. Trust comes from PinnedCASessionDelegate: the
+        # private CA as an anchor plus the server's spki_sha256 pin on the LAN host, and
+        # ordinary system validation on the Tailnet one (sync/v1 section 9). An app that
+        # supplies its own anchor in the authentication challenge is doing what ATS permits;
+        # what it does not permit, and what this app never did, is turning validation off.
+        #
+        # If a LAN connection ever fails here with CBError-style TLS refusal while the Tailnet
+        # route works, this is the first place to look: the symptom is transport(.tls), which
+        # the enrolment screen already renders as "this phone does not trust the server's
+        # certificate", and the remedy would be one key back in this file.
         CFBundleURLTypes:
           - CFBundleURLName: app.cairn.companion.configure
             CFBundleURLSchemes: [cairn]

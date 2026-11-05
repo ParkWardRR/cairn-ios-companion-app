@@ -13,7 +13,7 @@ import os
 /// numeric code. The old manager dropped a pairing failure into the same `linkLost` path as a
 /// walk out of range, and then could not say which had happened.
 @MainActor
-public final class CoreBluetoothCentral: NSObject, Central {
+public final class CoreBluetoothCentral: NSObject, Central, OffloadLinkProvider {
     public var onEvent: (@MainActor (LinkEvent) -> Void)?
 
     private static let log = Logger(subsystem: "app.cairn.companion", category: "ble")
@@ -24,6 +24,10 @@ public final class CoreBluetoothCentral: NSObject, Central {
     private var manager: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var characteristics: [CairnGATT.Characteristic: CBCharacteristic] = [:]
+    /// The offload conversation, when one is open. It is the one thing that does not go
+    /// through `LinkMachine`: its own protocol over two characteristics, with its own framing,
+    /// sequencing and CRC, which `OffloadClient` already speaks.
+    private var offloadLink: CoreBluetoothOffloadLink?
 
     private static let serviceUUID = CBUUID(string: CairnGATT.serviceUUID)
 
@@ -101,6 +105,23 @@ public final class CoreBluetoothCentral: NSObject, Central {
             // to do here but let it be logged.
             break
         }
+    }
+
+    // MARK: - Offload
+
+    public func openOffloadLink() -> (any OffloadLink)? {
+        guard let peripheral, peripheral.state == .connected,
+              let control = characteristics[.offloadControl],
+              let data = characteristics[.offloadData] else { return nil }
+        offloadLink?.end()
+        let link = CoreBluetoothOffloadLink(peripheral: peripheral, control: control, data: data)
+        offloadLink = link
+        return link
+    }
+
+    public func closeOffloadLink() {
+        offloadLink?.end()
+        offloadLink = nil
     }
 
     public static let storedIdentifierKey = "cairn.link.peripheral"
@@ -213,6 +234,7 @@ extension CoreBluetoothCentral: @preconcurrency CBCentralManagerDelegate {
         _ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral,
         timestamp: CFAbsoluteTime, isReconnecting: Bool, error: (any Error)?
     ) {
+        closeOffloadLink()
         characteristics = [:]
         emit(.disconnected(reference(peripheral), LinkFailure(error), isReconnecting: isReconnecting))
     }
@@ -253,6 +275,13 @@ extension CoreBluetoothCentral: @preconcurrency CBPeripheralDelegate {
         _ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?
     ) {
         guard let which = CairnGATT.characteristic(uuid: characteristic.uuid.uuidString) else { return }
+        // Offload traffic is its own conversation and is far too chatty for the link log: a
+        // bundle is hundreds of notifications. It goes straight to the link, whose own failures
+        // surface as a timeout or a CRC miss.
+        if which == .offloadControl || which == .offloadData {
+            if error == nil, let value = characteristic.value { offloadLink?.received(which, value: value) }
+            return
+        }
         // A read and a notification arrive through the same call. The machine asked for the
         // reads it cares about, so an error on one of those is a read failure; a value on a
         // channel it subscribed to is a notification.
@@ -290,12 +319,19 @@ extension CoreBluetoothCentral: @preconcurrency CBPeripheralDelegate {
         guard invalidatedServices.contains(where: { $0.uuid == Self.serviceUUID }) else { return }
         // The dongle's service changed under us — a reflash, or a firmware that rebuilt its
         // GATT table. Everything cached is stale.
+        closeOffloadLink()
         characteristics = [:]
         emit(.servicesDiscovered([], .cairn(21, "the dongle's Cairn service changed")))
     }
 
+    public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard CairnGATT.characteristic(uuid: characteristic.uuid.uuidString) == .offloadControl else { return }
+        offloadLink?.controlWriteFinished(error: error)
+    }
+
     public func peripheralIsReady(toSendWriteWithoutResponse peripheral: CBPeripheral) {
-        // The radio cleared after backpressure. Nothing to do: the next 1 Hz write goes through,
-        // and a fix held back is a fix the firmware would have rejected at 3 s anyway.
+        // A fix held back is a fix the firmware would have rejected at 3 s anyway, so priming
+        // simply drops one. An offload chunk cannot be dropped, so the link is told.
+        offloadLink?.radioReady()
     }
 }

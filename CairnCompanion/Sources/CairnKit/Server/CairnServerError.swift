@@ -59,13 +59,24 @@ public enum CairnServerError: Error, Sendable, Equatable {
     case forbidden(ForbiddenReason)
     /// 410 `cursor_reset` outside `pull` (which reports it as `PullOutcome.cursorReset`).
     case cursorReset
-    /// 429. `retryAfter` is the server's `Retry-After` in seconds, when it sent one.
+    /// 429 `rate_limited`. `retryAfter` is the server's `Retry-After` in seconds, when it sent
+    /// one.
     case rateLimited(retryAfter: TimeInterval?)
+    /// 429 `too_many_offers`: this client already has the server's limit of bundles offered and
+    /// not yet committed (`sync/v1` §13). **Retryable, and nothing is wrong with the data** —
+    /// which is what makes it different from the 403s and the 422 beside it. Commit or finish an
+    /// outstanding bundle, back off, offer again. No `Retry-After`, and the limit's value is the
+    /// server's choice: key off the code, never a number.
+    case tooManyOffers
     case badRequest(code: String)
     case notFound(code: String)
     case conflict(code: String)
     /// 422 `quarantined`: the bundle's counter was reused with different content.
     case quarantined
+    /// 507 `quota_exceeded`: the device is out of its storage allowance on the server. A stop,
+    /// not a retry — nothing the phone can do changes it, and offering the same bundle again
+    /// only wastes a drive's worth of radio.
+    case quotaExceeded
     /// 5xx: retry with backoff (spec section 4.3).
     case serverFailure(status: Int)
     /// A status or error code this client does not know. Not retryable unchanged.
@@ -84,11 +95,12 @@ public enum CairnServerError: Error, Sendable, Equatable {
         case .unauthenticated, .signatureRequired, .badManifestSignature, .clockSkew: 401
         case .forbidden: 403
         case .cursorReset: 410
-        case .rateLimited: 429
+        case .rateLimited, .tooManyOffers: 429
         case .badRequest: 400
         case .notFound: 404
         case .conflict: 409
         case .quarantined: 422
+        case .quotaExceeded: 507
         case .serverFailure(let status): status
         case .unexpected(let status, _): status
         case .malformedResponse, .transport, .signingFailed, .invalidArgument: nil
@@ -104,8 +116,10 @@ public enum CairnServerError: Error, Sendable, Equatable {
         case .forbidden(let reason): reason.code
         case .cursorReset: "cursor_reset"
         case .rateLimited: "rate_limited"
+        case .tooManyOffers: "too_many_offers"
         case .badRequest(let code), .notFound(let code), .conflict(let code): code
         case .quarantined: "quarantined"
+        case .quotaExceeded: "quota_exceeded"
         case .unexpected(_, let code): code
         case .serverFailure, .malformedResponse, .transport, .signingFailed, .invalidArgument: nil
         }

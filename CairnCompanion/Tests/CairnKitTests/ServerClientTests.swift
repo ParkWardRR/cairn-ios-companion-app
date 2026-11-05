@@ -696,3 +696,63 @@ private func makeClient(_ step: [String: Any], signerName: String, fix: [String:
         #expect(errorCount == 0, "\(errorCount) steps classified incorrectly")
     }
 }
+
+// MARK: - R3: the errors the offload loop has to tell apart
+
+@Suite("Named relay errors")
+struct NamedRelayErrorTests {
+    /// A transport that answers one canned response, so a status code can be asked about
+    /// directly rather than through a whole relay conversation.
+    private final class OneAnswer: HTTPTransport, @unchecked Sendable {
+        let status: Int
+        let body: Data
+        private(set) var calls = 0
+        init(status: Int, error code: String) {
+            self.status = status
+            self.body = Data("{\"error\":\"\(code)\"}".utf8)
+        }
+        func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+            calls += 1
+            return HTTPResponse(status: status, headers: ["Content-Type": "application/json"], body: body)
+        }
+    }
+
+    private func client(_ transport: OneAnswer) -> CairnServerClient {
+        CairnServerClient(transport: transport,
+                          signer: KeyProviderSigner(provider: SoftwareKeyProvider(), clientID: "00ff"))
+    }
+
+    @Test("429 too_many_offers is its own error, not rate limiting")
+    func tooManyOffers() async {
+        // The data is fine; this client simply has too many bundles in flight. Collapsing it
+        // into rate_limited would make the offload loop back off when it should commit.
+        let transport = OneAnswer(status: 429, error: "too_many_offers")
+        await #expect(throws: CairnServerError.tooManyOffers) {
+            _ = try await client(transport).relayOffer(manifest: Data("{}".utf8), signature: String(repeating: "a", count: 128))
+        }
+    }
+
+    @Test("429 rate_limited still means slow down")
+    func rateLimited() async {
+        let transport = OneAnswer(status: 429, error: "rate_limited")
+        await #expect(throws: CairnServerError.rateLimited(retryAfter: nil)) {
+            _ = try await client(transport).relayOffer(manifest: Data("{}".utf8), signature: String(repeating: "a", count: 128))
+        }
+    }
+
+    @Test("507 quota_exceeded is a stop, not a 5xx to retry with backoff")
+    func quotaExceeded() async {
+        let transport = OneAnswer(status: 507, error: "quota_exceeded")
+        await #expect(throws: CairnServerError.quotaExceeded) {
+            _ = try await client(transport).relayOffer(manifest: Data("{}".utf8), signature: String(repeating: "a", count: 128))
+        }
+    }
+
+    @Test("each one reports the status and the code it came from")
+    func statusesAndCodes() {
+        #expect(CairnServerError.tooManyOffers.httpStatus == 429)
+        #expect(CairnServerError.tooManyOffers.errorCode == "too_many_offers")
+        #expect(CairnServerError.quotaExceeded.httpStatus == 507)
+        #expect(CairnServerError.quotaExceeded.errorCode == "quota_exceeded")
+    }
+}
