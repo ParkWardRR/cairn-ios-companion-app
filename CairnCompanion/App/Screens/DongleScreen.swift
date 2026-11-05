@@ -16,6 +16,7 @@ struct DongleScreen: View {
     @State private var sharing: SharePayload?
 
     private var link: LinkSupervisor { model.link }
+    private var priming: PrimingService { model.priming }
 
     var body: some View {
         NavigationStack {
@@ -23,6 +24,8 @@ struct DongleScreen: View {
                 stateSection
                 if let advice = link.advice { adviceSection(advice) }
                 if let ready = link.ready { dongleSection(ready) } else { signalSection }
+                if link.ready != nil { receiverSection }
+                locationSection
                 if !link.subscriptionFailures.isEmpty { subscriptionSection }
                 controlsSection
                 logSection
@@ -131,6 +134,76 @@ struct DongleScreen: View {
         }
     }
 
+    /// Link ready → time hint → position hint → first 2D → first 3D, in seconds since the link
+    /// came up. The dongle's own serial log carries a time-to-first-fix line per receiver start
+    /// in the same shape, and R2's whole evidence is the two of them side by side, with the
+    /// phone and without it. There is nothing to assert instead: the receiver sits behind the
+    /// Freematics co-processor, which returns no UBX replies, so a hint can never be
+    /// acknowledged and the timing *is* the measurement.
+    private var receiverSection: some View {
+        Section {
+            let timeline = priming.timeline
+            TimelineRow(label: "Link ready", seconds: 0, done: true)
+            TimelineRow(label: "Clock hint", seconds: timeline.seconds(timeline.clockHintAt),
+                        done: timeline.clockHintAt != nil)
+            TimelineRow(label: "Position hint", seconds: timeline.seconds(timeline.positionHintAt),
+                        done: timeline.sentPositionHint)
+            TimelineRow(label: "First 2D fix", seconds: timeline.ttff2D, done: timeline.first2DAt != nil)
+            TimelineRow(label: "First 3D fix", seconds: timeline.ttff3D, done: timeline.first3DAt != nil)
+
+            if let skip = priming.hintSkipped {
+                Text("No position hint: \(skip.description).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let quality = priming.quality {
+                LabeledContent("Receiver") {
+                    Text("\(quality.satsUsed) sats"
+                         + (quality.hdop.map { String(format: " · HDOP %.2f", $0) } ?? ""))
+                    .font(.caption.monospaced())
+                }
+            }
+            if let status = priming.status {
+                LabeledContent("Dongle accepted") {
+                    Text("\(status.acceptedCount) · \(status.rejectedCount) rejected"
+                         + (status.queueDropCount > 0 ? " · \(status.queueDropCount) dropped" : ""))
+                    .font(.caption.monospaced())
+                }
+            }
+            LabeledContent("Sent") {
+                Text("\(priming.sent.hints) hint · \(priming.sent.fixes) fixes · \(priming.sent.clocks) clocks")
+                    .font(.caption.monospaced())
+            }
+        } header: {
+            Text("Receiver")
+        } footer: {
+            Text("Seconds since the link came up. The dongle logs its own time-to-first-fix line "
+                 + "per receiver start; these two are meant to be read together.")
+        }
+    }
+
+    private var locationSection: some View {
+        Section("This phone") {
+            LabeledContent("Location", value: priming.authorisation.title)
+            if priming.authorisation == .notDetermined {
+                Button("Allow Location") { priming.requestAuthorisation() }
+            } else if !priming.authorisation.survivesALockedPhone {
+                Text("Without location, the dongle's receiver starts cold every time and the "
+                     + "phone can lend it nothing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            if let fix = priming.lastFix {
+                LabeledContent("Last fix") {
+                    Text(String(format: "%.5f, %.5f · ±%.0f m", fix.latitude, fix.longitude,
+                                max(0, fix.horizontalAccuracy)))
+                    .font(.caption.monospaced())
+                }
+                LabeledContent("Age", value: LinkHealth.ageLabel(now.timeIntervalSince(fix.timestamp)))
+            }
+        }
+    }
+
     private var signalSection: some View {
         Section("Signal") {
             if let rssi = link.lastRSSI {
@@ -206,6 +279,26 @@ struct DongleScreen: View {
             .appendingPathComponent("cairn-link-\(Int(Date().timeIntervalSince1970)).txt")
         try? Data(model.exportText().utf8).write(to: url)
         sharing = SharePayload(url: url)
+    }
+}
+
+/// One step of the receiver timeline: what it is, and how many seconds after link-ready it
+/// happened — or a dash, because a step that has not happened is not zero.
+private struct TimelineRow: View {
+    let label: String
+    let seconds: TimeInterval?
+    let done: Bool
+
+    var body: some View {
+        HStack {
+            Image(systemName: done ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(done ? Color.green : Color.secondary)
+            Text(label)
+            Spacer()
+            Text(seconds.map { String(format: "+%.1f s", $0) } ?? "—")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

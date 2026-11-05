@@ -32,11 +32,20 @@ public struct GNSSFixPayload: Sendable, Equatable {
     public var seq: UInt16
     public var companionFlags: UInt8
 
+    /// Byte 26, `ble/v1/spec.md` § `companion_flags`: what the phone knows and the receiver
+    /// cannot see.
     public struct CompanionFlags: OptionSet, Sendable {
         public let rawValue: UInt8
         public init(rawValue: UInt8) { self.rawValue = rawValue }
+        /// The phone is on power.
         public static let charging = CompanionFlags(rawValue: 1 << 0)
+        /// Not a measurement: a cached position, sent once so a cold receiver has somewhere to
+        /// start. Accepted past the staleness rule, and never recorded as a position sample.
+        public static let hint = CompanionFlags(rawValue: 1 << 1)
     }
+
+    public var flags: CompanionFlags { CompanionFlags(rawValue: companionFlags) }
+    public var isHint: Bool { flags.contains(.hint) }
 
     public init(
         latE7: Int32, lonE7: Int32, altCm: Int32,
@@ -100,9 +109,13 @@ public enum PayloadEncoder {
 
     /// Returns nil when the fix is stale and must not be sent. Invalid fixes are still encoded
     /// (validity bits clear, sentinels set); the firmware rejects `b0 == 0`.
-    public static func encode(_ fix: PhoneGNSSFix, now: Date, seq: UInt16, isCharging: Bool = false) -> GNSSFixPayload? {
+    public static func encode(
+        _ fix: PhoneGNSSFix, now: Date, seq: UInt16, isCharging: Bool = false,
+        ignoringAge: Bool = false
+    ) -> GNSSFixPayload? {
         let age = now.timeIntervalSince(fix.timestamp)
-        guard age.isFinite, abs(age) <= maxFixAge else { return nil }
+        guard age.isFinite else { return nil }
+        guard ignoringAge || abs(age) <= maxFixAge else { return nil }
 
         var validity: GNSSFixPayload.Validity = []
 
@@ -163,6 +176,27 @@ public enum PayloadEncoder {
             seq: seq,
             companionFlags: flags
         )
+    }
+
+    /// A **hint**: the phone's last known position, however old, sent once at link-ready so a
+    /// cold receiver has somewhere to start (`ble/v1/spec.md` § `companion_flags`, bit 1).
+    ///
+    /// This is the one place the two-second staleness rule is deliberately broken, and the
+    /// contract breaks it on the same terms the firmware does: the frame is for hinting only and
+    /// is never recorded as a position sample. `sample_age_ms` saturates at `0xFFFF`, which is
+    /// all a minutes-old fix can honestly say about itself.
+    ///
+    /// Returns nil when the cached fix has no usable position — a hint with no position is
+    /// nothing, and the contract requires `validity_flags` b0 to be set.
+    public static func hint(
+        _ fix: PhoneGNSSFix, now: Date, seq: UInt16, isCharging: Bool = false
+    ) -> GNSSFixPayload? {
+        var flags: GNSSFixPayload.CompanionFlags = [.hint]
+        if isCharging { flags.insert(.charging) }
+        guard var payload = encode(fix, now: now, seq: seq, ignoringAge: true) else { return nil }
+        guard payload.validity.contains(.position) else { return nil }
+        payload.companionFlags = flags.rawValue
+        return payload
     }
 
     /// Core Location uses negative values for "invalid"; NaN/inf are treated the same way.

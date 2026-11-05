@@ -16,6 +16,13 @@ public final class LinkSupervisor {
     /// Where transitions are mirrored for export. Nil in a test.
     private let sink: ((LinkLogEntry) -> Void)?
 
+    /// Called on every state change. The priming policy is the only listener today: the
+    /// background location session starts when the link is ready and at no other time.
+    public var onTransition: (@MainActor (_ from: LinkState, _ to: LinkState) -> Void)?
+    /// Every notification, with its bytes. The machine itself only remembers *when* each
+    /// channel was last heard; what `GNSS_QUALITY` actually said is R2's whole measurement.
+    public var onNotify: (@MainActor (CairnGATT.Characteristic, Data) -> Void)?
+
     private var inbox: [LinkEvent] = []
     private var isPumping = false
     private var mirroredUpTo = -1
@@ -88,11 +95,24 @@ public final class LinkSupervisor {
             let next = inbox.removeFirst()
             let before = machine.state
             let effects = machine.handle(next, now: clock.now)
-            if before != machine.state { stateEntered = clock.now }
+            if before != machine.state {
+                stateEntered = clock.now
+                onTransition?(before, machine.state)
+            }
+            if case .notified(let characteristic, let data) = next {
+                onNotify?(characteristic, data)
+            }
             mirror()
             for effect in effects { central.perform(effect) }
         }
-        clock.wake(at: machine.nextDeadline) { [weak self] in self?.deliver(.tick) }
+        clock.wake("link", at: machine.nextDeadline) { [weak self] in self?.deliver(.tick) }
+    }
+
+    /// Write a line into the link log from outside the machine — the receiver timeline, say.
+    /// The log is the record of what the phone saw, and the receiver is part of that.
+    public func note(_ detail: String) {
+        machine.note(detail, at: clock.now)
+        mirror()
     }
 
     private func mirror() {

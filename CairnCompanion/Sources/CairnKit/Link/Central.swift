@@ -34,30 +34,35 @@ public enum WriteOutcome: Equatable, Sendable {
 
 /// The only clock the link is allowed to read.
 ///
-/// Every deadline in `LinkMachine` is a `Date` comparison against a value handed in, and the one
-/// object that knows what time it is lives behind this. `TestLinkClock` is what lets the bench
-/// matrix run in milliseconds and lets a 15-second deadline be tested exactly.
+/// Every deadline in `LinkMachine` and every cadence in `PrimingPolicy` is a `Date` comparison
+/// against a value handed in, and the one object that knows what time it is lives behind this.
+/// `TestLinkClock` is what lets the bench matrix run in milliseconds and lets a 15-second
+/// deadline be tested exactly.
+///
+/// Wake-ups are named, because more than one thing waits on this clock — the link for its
+/// deadlines, the priming policy for its cadence — and each replaces only its own.
 @MainActor
 public protocol LinkClock: AnyObject {
     var now: Date { get }
-    /// Wake `action` at `date`, replacing any pending wake-up. `nil` cancels.
-    func wake(at date: Date?, _ action: @escaping @MainActor () -> Void)
+    /// Wake `action` at `date`, replacing any pending wake-up under the same name. `nil`
+    /// cancels that name.
+    func wake(_ name: String, at date: Date?, _ action: @escaping @MainActor () -> Void)
 }
 
-/// The real clock: `Date()` and a cancellable sleeping task.
+/// The real clock: `Date()` and one cancellable sleeping task per name.
 @MainActor
 public final class SystemLinkClock: LinkClock {
-    private var task: Task<Void, Never>?
+    private var tasks: [String: Task<Void, Never>] = [:]
 
     public init() {}
 
     public var now: Date { Date() }
 
-    public func wake(at date: Date?, _ action: @escaping @MainActor () -> Void) {
-        task?.cancel()
-        guard let date else { task = nil; return }
+    public func wake(_ name: String, at date: Date?, _ action: @escaping @MainActor () -> Void) {
+        tasks[name]?.cancel()
+        guard let date else { tasks[name] = nil; return }
         let delay = max(0, date.timeIntervalSinceNow)
-        task = Task { @MainActor in
+        tasks[name] = Task { @MainActor in
             try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             action()
@@ -67,37 +72,41 @@ public final class SystemLinkClock: LinkClock {
 
 /// A clock a test moves by hand.
 ///
-/// `advance(by:)` fires every wake-up it passes, in order, so a test can say "fifteen seconds go
-/// by" and get exactly the deadline behaviour the phone would get — without waiting fifteen
-/// seconds, and without a flaky margin.
+/// `advance(by:)` fires every wake-up it passes, oldest first, so a test can say "fifteen
+/// seconds go by" and get exactly the deadline behaviour the phone would get — without waiting
+/// fifteen seconds, and without a flaky margin.
 @MainActor
 public final class TestLinkClock: LinkClock {
     public private(set) var now: Date
-    private var pending: (date: Date, action: @MainActor () -> Void)?
+    private var pending: [String: (date: Date, action: @MainActor () -> Void)] = [:]
 
     public init(_ start: Date = Date(timeIntervalSince1970: 1_800_000_000)) {
         self.now = start
     }
 
-    public func wake(at date: Date?, _ action: @escaping @MainActor () -> Void) {
-        pending = date.map { ($0, action) }
+    public func wake(_ name: String, at date: Date?, _ action: @escaping @MainActor () -> Void) {
+        if let date {
+            pending[name] = (date, action)
+        } else {
+            pending[name] = nil
+        }
     }
 
-    /// Move time forward, firing each wake-up at the moment it is due.
+    /// Move time forward, firing each wake-up at the moment it is due and in due order.
     public func advance(by interval: TimeInterval) {
         let target = now.addingTimeInterval(interval)
-        // A wake-up may schedule the next one, so loop rather than fire once.
         var guardRail = 0
-        while let next = pending, next.date <= target {
+        while let next = pending.filter({ $0.value.date <= target })
+            .min(by: { $0.value.date < $1.value.date }) {
             guardRail += 1
-            precondition(guardRail < 1000, "a wake-up kept rescheduling itself inside one advance")
-            pending = nil
-            now = next.date
-            next.action()
+            precondition(guardRail < 10_000, "a wake-up kept rescheduling itself inside one advance")
+            pending[next.key] = nil
+            now = next.value.date
+            next.value.action()
         }
         now = target
     }
 
-    public var hasPendingWake: Bool { pending != nil }
-    public var pendingWakeAt: Date? { pending?.date }
+    public var pendingNames: Set<String> { Set(pending.keys) }
+    public func pendingWake(_ name: String) -> Date? { pending[name]?.date }
 }

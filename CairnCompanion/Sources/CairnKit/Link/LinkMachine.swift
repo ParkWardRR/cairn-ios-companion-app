@@ -145,6 +145,12 @@ public struct LinkMachine: Sendable {
         return effects
     }
 
+    /// A line from outside: the receiver timeline, or anything else a bench record wants beside
+    /// the link's own transitions. It cannot change the state, only the record of it.
+    public mutating func note(_ detail: String, at now: Date) {
+        log.append(at: now, state: state.name, detail: detail, kind: .event)
+    }
+
     private func describeTransition(now: Date) -> String {
         switch state {
         case .ready(let r):

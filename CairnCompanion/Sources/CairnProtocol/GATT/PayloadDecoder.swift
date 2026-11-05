@@ -11,6 +11,21 @@ public struct GNSSQuality: Sendable, Equatable {
 
     /// HDOP in natural units, or nil when the receiver reports unknown (`0xFFFF`).
     public var hdop: Double? { hdopE2 == 0xFFFF ? nil : Double(hdopE2) / 100 }
+
+    public init(fixType: UInt8, satsUsed: UInt8, hdopE2: UInt16, fixAgeMs: UInt32) {
+        self.fixType = fixType
+        self.satsUsed = satsUsed
+        self.hdopE2 = hdopE2
+        self.fixAgeMs = fixAgeMs
+    }
+
+    /// Encoding is for tests and for `FakeCentral`: the device writes these, not the phone.
+    public var data: Data {
+        var out = Data([fixType, satsUsed])
+        out.appendLE(hdopE2)
+        out.appendLE(fixAgeMs)
+        return out
+    }
 }
 
 /// `COMPANION_STATUS` notify: firmware acceptance feedback. Layout is proposed, not frozen.
@@ -21,6 +36,19 @@ public struct CompanionStatus: Sendable, Equatable {
     public var acceptedCount: UInt16
     public var rejectedCount: UInt16
     public var queueDropCount: UInt16
+
+    public init(lastAcceptedSeq: UInt16, acceptedCount: UInt16, rejectedCount: UInt16, queueDropCount: UInt16) {
+        self.lastAcceptedSeq = lastAcceptedSeq
+        self.acceptedCount = acceptedCount
+        self.rejectedCount = rejectedCount
+        self.queueDropCount = queueDropCount
+    }
+
+    public var data: Data {
+        var out = Data()
+        for value in [lastAcceptedSeq, acceptedCount, rejectedCount, queueDropCount] { out.appendLE(value) }
+        return out
+    }
 }
 
 /// `OBD_LIVE` notify (48 bytes): latest OBD-II snapshot from the dongle's ELM/STN adapter.

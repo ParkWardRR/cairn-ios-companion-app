@@ -15,14 +15,17 @@ import Observation
 final class AppModel {
     let build: BuildIdentity
     let link: LinkSupervisor
+    /// The clock and the position the dongle's receiver cannot get for itself.
+    let priming: PrimingService
     /// The log on disk, so a link can be reviewed after a drive the phone spent locked in a
     /// mount. The ring in `LinkSupervisor` is what the screen shows; this is what survives a
     /// relaunch and what Export Log shares.
     let driveLog: DriveLog
 
-    init(build: BuildIdentity, link: LinkSupervisor, driveLog: DriveLog) {
+    init(build: BuildIdentity, link: LinkSupervisor, priming: PrimingService, driveLog: DriveLog) {
         self.build = build
         self.link = link
+        self.priming = priming
         self.driveLog = driveLog
     }
 
@@ -31,16 +34,23 @@ final class AppModel {
     static func live() -> AppModel {
         let driveLog = DriveLog.shared
         let central = CoreBluetoothCentral()
+        // One clock for the link's deadlines and the priming cadence, so an exported log's
+        // timings all come from the same place.
+        let clock = SystemLinkClock()
         let link = LinkSupervisor(
             machine: LinkMachine(storedIdentifier: CoreBluetoothCentral.storedIdentifier),
             central: central,
-            clock: SystemLinkClock(),
+            clock: clock,
             sink: { entry in driveLog.record("link \(entry.state) \(entry.detail)", at: entry.at) }
         )
-        let model = AppModel(build: .current, link: link, driveLog: driveLog)
+        let priming = PrimingService(
+            link: link, location: CoreLocationSource(), clock: clock
+        )
+        let model = AppModel(build: .current, link: link, priming: priming, driveLog: driveLog)
         // Nothing is gated on a screen being visible: the app wants the link from launch, and
         // iOS relaunches it for the dongle through state restoration.
         link.start()
+        priming.requestAuthorisation()
         return model
     }
 
@@ -49,4 +59,8 @@ final class AppModel {
     func exportText() -> String {
         link.exportLog(build: build)
     }
+
+    /// Everything about this phone that the Dongle screen says, in the form a bench record
+    /// wants: one line per step, seconds since link-ready.
+    var receiverLine: String { priming.timeline.line }
 }

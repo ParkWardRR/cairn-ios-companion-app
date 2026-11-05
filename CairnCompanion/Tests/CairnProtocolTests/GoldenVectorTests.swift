@@ -9,6 +9,10 @@ private struct Vectors: Decodable {
         struct Input: Decodable {
             let lat, lon, alt, hacc, vacc, speed, course, age: Double
             let seq: UInt16
+            /// Byte 26, added in the `companion_flags` change. Absent in every vector written
+            /// before it, so a pin that predates the change still replays: the field is
+            /// optional here, not in the spec.
+            let companion_flags: UInt8?
         }
         let name: String
         let input: Input
@@ -29,6 +33,14 @@ private let vectors: Vectors = try! JSONDecoder().decode(
 private func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0) }.joined() }
 
 @Suite struct GoldenVectorTests {
+    /// Which of the pinned vectors carry `companion_flags`. Zero on a pin from before the
+    /// change; the moment the pin moves, the hint and charging cases start being replayed with
+    /// no edit here. Printed rather than asserted, so neither pin fails the suite.
+    @Test func whichVectorsAreInThePin() {
+        let flagged = vectors.gnss_fix.filter { ($0.input.companion_flags ?? 0) != 0 }
+        print("golden vectors with companion_flags: \(flagged.map(\.name))")
+    }
+
     @Test func gnssFix() throws {
         let now = Date(timeIntervalSince1970: vectors.now_unix)
         for v in vectors.gnss_fix {
@@ -38,8 +50,18 @@ private func hex(_ data: Data) -> String { data.map { String(format: "%02x", $0)
                 horizontalAccuracy: i.hacc, verticalAccuracy: i.vacc, speed: i.speed, course: i.course,
                 timestamp: now.addingTimeInterval(-i.age)
             )
-            let payload = try #require(PayloadEncoder.encode(fix, now: now, seq: i.seq), "\(v.name)")
+            let flags = GNSSFixPayload.CompanionFlags(rawValue: i.companion_flags ?? 0)
+            // A `HINT` vector is a cached fix on purpose, so it goes through the one encoder
+            // that is allowed to ignore the two-second rule. Everything else goes through the
+            // ordinary one, which must still refuse a stale fix.
+            let payload = try #require(
+                flags.contains(.hint)
+                    ? PayloadEncoder.hint(fix, now: now, seq: i.seq, isCharging: flags.contains(.charging))
+                    : PayloadEncoder.encode(fix, now: now, seq: i.seq, isCharging: flags.contains(.charging)),
+                "\(v.name)"
+            )
             #expect(hex(payload.data) == v.hex, "\(v.name)")
+            #expect(payload.companionFlags == (i.companion_flags ?? 0), "\(v.name): companion_flags")
         }
     }
 
