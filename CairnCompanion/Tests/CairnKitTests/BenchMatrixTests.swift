@@ -174,9 +174,14 @@ struct BenchMatrixTests {
         #expect(!bench.askedTheOwnerForSomething)
 
         let advice = bench.supervisor.advice
-        #expect(advice?.contains("usually signal rather than pairing") == true,
-                "advice was \(advice ?? "nil")")
         #expect(advice?.contains("CB 15") == true, "the advice must carry the code: \(advice ?? "nil")")
+        // Past the limit with nothing ever succeeding, the bond is the explanation and the owner
+        // is the only one who can act — but it keeps retrying, because a struggling radio looks
+        // the same for the first few attempts and must not be given up on.
+        #expect(bench.supervisor.machine.encryptionFailures >= LinkMachine.encryptionFailureLimit,
+                "\(bench.transcript)")
+        #expect(advice?.contains("Forget This Device") == true, "advice was \(advice ?? "nil")")
+        #expect(advice?.contains("still retrying") == true, "it must not read as terminal")
     }
 
     /// `CB 14` is different: iOS is saying the peer no longer recognises this phone's keys, which

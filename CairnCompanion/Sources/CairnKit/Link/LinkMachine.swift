@@ -33,6 +33,22 @@ public struct LinkMachine: Sendable {
     public static let pairingFailureWindow: TimeInterval = 60
     /// Three in a row and only the owner can fix it: the app cannot delete an iOS bond.
     public static let pairingFailureLimit = 3
+    /// How many encryption failures with no success in between before the advice stops blaming
+    /// the signal and starts naming the bond.
+    ///
+    /// `CBErrorDomain#15` is genuinely ambiguous, and both readings of it were seen on the same
+    /// dongle within one hour on 2026-11-05. First a bad link: the phone logged `#15` while the
+    /// dongle logged `paired: encrypted=1 bonded=1` on every one of those attempts, so the bond
+    /// was perfect and the encryption was merely timing out on sessions lasting 1.7 s. Then a
+    /// genuinely stale bond: the dongle dropped its half, so iOS was offering a key that no
+    /// longer existed and `#15` was permanent.
+    ///
+    /// What separates them is not the code, it is whether anything ever succeeds. A bad link
+    /// succeeds intermittently — five times, that hour — and a stale bond never succeeds at all.
+    /// So this counts *consecutive* failures and `becomeReady` resets it. Reaching the limit
+    /// changes what the advice says; it deliberately does **not** go to `needsForget`, because
+    /// that is terminal and a radio that is merely struggling must keep retrying.
+    public static let encryptionFailureLimit = 3
     /// An ATT authentication error on the version read is retried once. Twice means iOS holds no
     /// key the dongle will accept.
     public static let authRetryLimit = 1
@@ -64,6 +80,9 @@ public struct LinkMachine: Sendable {
     public private(set) var lastNotified: [CairnGATT.Characteristic: Date] = [:]
     /// Consecutive pairing failures, kept across reconnects within one episode.
     public private(set) var pairingFailures = 0
+    /// Consecutive `CBErrorDomain#15` failures with no `ready` in between. See
+    /// `encryptionFailureLimit` for why the count, rather than the code, is what means anything.
+    public private(set) var encryptionFailures = 0
     public private(set) var attempt = 0
 
     private var authRetries = 0
@@ -144,11 +163,19 @@ public struct LinkMachine: Sendable {
         // 2026-11-05 the dongle logged a successful pair on every attempt the phone reported this
         // on. So name the likely cause, and the one that would be true if it persists.
         case .backoff(_, let reason, _) where reason.isEncryptionFailure:
+            // Past the limit, nothing has ever succeeded, so the bond is the explanation and the
+            // owner is the only one who can act. Still retrying underneath, in case it is not.
+            if encryptionFailures >= Self.encryptionFailureLimit {
+                return "Open Settings › Bluetooth, tap the ⓘ beside Cairn and choose \"Forget "
+                    + "This Device\", then come back and tap Retry. The dongle has pairing keys "
+                    + "this phone does not match (\(reason.shortCode)) after "
+                    + "\(encryptionFailures) tries, and an app cannot delete an iOS pairing. "
+                    + "It is still retrying in case this is only a weak signal."
+            }
             var advice = "The dongle answered but the link did not survive long enough to finish "
                 + "securing it. That is usually signal rather than pairing"
             if let lastRSSI { advice += ", and it was last heard at \(lastRSSI) dBm" }
-            advice += ". Retrying by itself. If it never gets through, Settings › Bluetooth › "
-                + "Forget This Device and tap Retry (\(reason.shortCode))."
+            advice += ". Retrying by itself (\(reason.shortCode))."
             return advice
         case .backoff(_, let reason, _):
             return reason.message
@@ -296,6 +323,7 @@ public struct LinkMachine: Sendable {
             if failure.isPeerRemovedPairing {
                 return pairingFailed(failure, now: now)
             }
+            if failure.isEncryptionFailure { encryptionFailures += 1 }
             return backoff(failure, now: now)
 
         case .disconnected(let peripheral, let failure, let isReconnecting):
@@ -372,6 +400,7 @@ public struct LinkMachine: Sendable {
         if let failure, failure.isPeerRemovedPairing {
             return pairingFailed(failure, now: now)
         }
+        if let failure, failure.isEncryptionFailure { encryptionFailures += 1 }
 
         // A disconnect while securing, soon after connecting, is a pairing failure. This is how
         // the dongle's own "pairing failed, disconnecting" arrives at a central: the firmware
@@ -484,6 +513,9 @@ public struct LinkMachine: Sendable {
         let wasFirstReady = storedIdentifier != peripheral.id
         attempt = 0
         pairingFailures = 0
+        // Reaching ready means the bond encrypted, so no run of encryption failures before this
+        // was the bond's fault. This reset is what makes the count mean "never succeeded".
+        encryptionFailures = 0
         authRetries = 0
         directAttempts = 0
         writeRemeasures = 0
@@ -631,6 +663,7 @@ public struct LinkMachine: Sendable {
     private mutating func resetEpisode() {
         attempt = 0
         pairingFailures = 0
+        encryptionFailures = 0
         authRetries = 0
         directAttempts = 0
         subscriptionFailures = [:]

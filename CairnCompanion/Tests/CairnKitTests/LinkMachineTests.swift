@@ -259,6 +259,37 @@ struct LinkMachineTests {
         #expect(driver.machine.advice?.contains("powered") == true)
     }
 
+    /// The other reading of the same code, and the reason the count is what decides.
+    ///
+    /// Measured 2026-11-05 on the same dongle within the same hour: the phone logged `CB 15`
+    /// while the dongle logged `paired: encrypted=1 bonded=1` on every one of those attempts.
+    /// The bond was perfect; encryption was timing out on sessions lasting 1.7 s. A success
+    /// resets the count, so advice that blames the bond is never reached while anything works.
+    @Test("an encryption failure after a success blames the signal, not the bond")
+    func encryptionFailureAfterSuccessBlamesSignal() {
+        let failure = LinkFailure(domain: LinkFailure.cbDomain,
+                                  code: LinkFailure.CB.encryptionTimedOut.rawValue,
+                                  message: "Failed to encrypt the connection.")
+        var driver = Driver()
+        driver.reachReady()
+        #expect(driver.machine.encryptionFailures == 0)
+
+        // A drop from ready reconnects at once rather than backing off, which is correct: the
+        // dongle re-advertises the instant it disconnects. The encryption failure lands on that
+        // reconnect, which is exactly where the radio put it.
+        driver.send(.disconnected(dongle, nil, isReconnecting: false))
+        #expect(driver.state.name == "connecting")
+        driver.send(.failedToConnect(dongle, failure))
+        #expect(driver.state.name == "backoff")
+        #expect(driver.machine.encryptionFailures == 1, "counted, but nowhere near the limit")
+
+        let advice = driver.machine.advice
+        #expect(advice?.contains("usually signal rather than pairing") == true,
+                "advice was \(advice ?? "nil")")
+        #expect(advice?.contains("Forget This Device") == false,
+                "a bond that encrypted a moment ago must not be blamed")
+    }
+
     @Test("a disconnect while securing is a pairing failure, and three of them ask the owner")
     func disconnectWhileSecuringIsPairingFailure() {
         var driver = Driver()
