@@ -215,6 +215,26 @@ public enum BenchRecord {
             out += "| Characteristics | \(ready.present.map(\.title).sorted().joined(separator: ", ")) |\n"
         }
         if let lastRSSI { out += "| Last signal | \(lastRSSI) dBm |\n" }
+        if let info = ready?.deviceInfo {
+            if let storage = info.storage {
+                out += "| Card | \(Self.storage(storage)) |\n"
+            }
+            if let identity = info.identity {
+                out += "| Dongle enrolment | \(identity.enrolState) |\n"
+            }
+            if let boot = info.bootTiming {
+                out += "| Dongle boot → BLE | \(boot.bootToBLEms) ms |\n"
+                out += "| Dongle boot → first fix | "
+                out += boot.bootToFirstFixMs.map { "**\($0) ms**" } ?? "no fix yet at the last read"
+                out += " |\n"
+            }
+            let transports = info.transports
+                .map { "\($0.kind) \($0.availableNow ? "up" : ($0.enabled ? "enabled" : "off"))" }
+            if !transports.isEmpty { out += "| Transports | \(transports.joined(separator: ", ")) |\n" }
+            if !info.engines.isEmpty {
+                out += "| Engines compiled in | \(info.engines.map(\.engineID).joined(separator: ", ")) |\n"
+            }
+        }
         out += "| Car | **[ fill in: which car, or a bench ]** |\n"
         out += "| Ended in | `\(state.name)`\(state.failure.map { " · \($0)" } ?? "") |\n\n"
 
@@ -231,6 +251,9 @@ public enum BenchRecord {
             out += "| TTFF 2D | \(Self.seconds(timeline.ttff2D)) |\n"
             out += "| TTFF 3D | \(Self.seconds(timeline.ttff3D)) |\n"
             out += "| Dongle's own TTFF line | **[ paste from the serial log ]** |\n\n"
+            out += "The dongle's `boot → first fix` above comes from `DEVICE_INFO`, re-read when\n"
+            out += "the receiver first reported a fix, so it is the dongle's own number and not\n"
+            out += "the phone's reading of it. Its `TTFF` line carries which hints went.\n\n"
         }
 
         if let offload, offload.delivered > 0 || offload.waiting > 0 || offload.stopped != nil {
@@ -287,6 +310,15 @@ public enum BenchRecord {
             for failure in observations.failures.suffix(30) { out += "- `\(failure)`\n" }
             out += "\n"
         }
+        return out
+    }
+
+    /// `ok, 3 bundles waiting, 29876 MiB free` — the card, in one line, for the screen and
+    /// for the record.
+    public static func storage(_ storage: DeviceInfo.Storage) -> String {
+        var out = "\(storage.state)"
+        out += ", \(storage.pendingBundles) bundle\(storage.pendingBundles == 1 ? "" : "s") waiting"
+        if let free = storage.freeMiB { out += ", \(free) MiB free" }
         return out
     }
 

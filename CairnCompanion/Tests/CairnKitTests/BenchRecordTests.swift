@@ -215,3 +215,79 @@ struct BenchRecordTests {
         #expect(BenchMatrix.rowName(fromMarker: "→ ready") == nil)
     }
 }
+
+@MainActor
+@Suite("BenchRecord: what the dongle says about itself")
+struct BenchRecordDeviceInfoTests {
+    private func ready(_ info: DeviceInfo?) -> LinkReady {
+        LinkReady(
+            peripheral: PeripheralRef(id: "D1", name: "Cairn"),
+            version: ProtocolVersion(version: 1, capabilities: [.deviceInformation]),
+            present: [.gnssFix, .protocolVersion, .deviceInfo],
+            writeLength: 244, deviceInfo: info, readyAt: t0
+        )
+    }
+
+    private func markdown(_ info: DeviceInfo?, timeline: ReceiverTimeline = ReceiverTimeline()) -> String {
+        BenchRecord.markdown(
+            at: t0, build: BuildIdentity(version: "0.2.0", build: "90", channel: .dev, commit: "abc1234"),
+            state: .ready(ready(info)), ready: ready(info), lastRSSI: -60,
+            timeline: timeline, offload: nil, log: LinkLog()
+        )
+    }
+
+    /// The contract's own vector, so the record is shown against a real payload rather than
+    /// one invented to suit it.
+    private var contractInfo: DeviceInfo? {
+        guard let data = FakeCentral.Dongle.contractDeviceInfo else { return nil }
+        return try? parseDeviceInfo(data)
+    }
+
+    @Test("the dongle's own time to first fix goes in the record, from DEVICE_INFO")
+    func dongleTTFF() throws {
+        // The whole point of re-reading DEVICE_INFO once the receiver fixes: R2 is measured by
+        // putting the dongle's number beside the phone's, and this is how the dongle's gets
+        // into the record without anybody reading a serial log.
+        let info = try #require(contractInfo)
+        var timeline = ReceiverTimeline(linkReadyAt: t0)
+        timeline.observe(fixType: 2, at: t0.addingTimeInterval(19))
+
+        let text = markdown(info, timeline: timeline)
+        if let fix = info.bootTiming?.bootToFirstFixMs {
+            #expect(text.contains("Dongle boot → first fix"))
+            #expect(text.contains("\(fix) ms"))
+        } else {
+            #expect(text.contains("no fix yet at the last read"))
+        }
+        #expect(text.contains("boot → BLE"))
+    }
+
+    @Test("the card, the transports and the engines are in it")
+    func theRest() throws {
+        let info = try #require(contractInfo)
+        let text = markdown(info)
+        #expect(text.contains("| Card |"))
+        if !info.transports.isEmpty { #expect(text.contains("| Transports |")) }
+        if !info.engines.isEmpty {
+            #expect(text.contains("| Engines compiled in |"))
+            #expect(text.contains(info.engines[0].engineID))
+        }
+    }
+
+    @Test("a dongle that said nothing about itself makes a record without those rows")
+    func noDeviceInfo() {
+        let text = markdown(nil)
+        #expect(text.contains("not read — `DEVICE_INFO` did not arrive"))
+        #expect(!text.contains("| Card |"))
+    }
+
+    @Test("the card summary reads as a sentence")
+    func storageSummary() {
+        #expect(BenchRecord.storage(.init(state: .ok, pendingBundles: 3, freeMiB: 29876))
+                == "ok, 3 bundles waiting, 29876 MiB free")
+        #expect(BenchRecord.storage(.init(state: .ok, pendingBundles: 1, freeMiB: nil))
+                == "ok, 1 bundle waiting")
+        #expect(BenchRecord.storage(.init(state: .noCard, pendingBundles: 0, freeMiB: nil))
+                == "noCard, 0 bundles waiting")
+    }
+}

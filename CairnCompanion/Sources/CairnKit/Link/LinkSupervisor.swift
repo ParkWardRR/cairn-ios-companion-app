@@ -66,6 +66,19 @@ public final class LinkSupervisor {
     public func retry() { deliver(.retryRequested) }
     public func forget() { deliver(.forgetRequested) }
 
+    /// Ask the dongle to describe itself again.
+    ///
+    /// `DEVICE_INFO` is built when it is read, so it reports the state at that moment rather
+    /// than at connect: a card that has since mounted, bundles that have since sealed, and —
+    /// the one that matters for R2 — `boot_to_first_fix_ms`, which is unknown at link-ready
+    /// and known a minute later. Re-reading it once the receiver reports a fix is how the
+    /// phone learns the dongle's own time to first fix without anybody reading a serial log.
+    public func refreshDeviceInfo() {
+        guard let ready = machine.ready,
+              ready.version.hasDeviceInformation, ready.has(.deviceInfo) else { return }
+        central.perform(.read(.deviceInfo))
+    }
+
     /// Write to the dongle. Returns `.notAvailable` unless the link is ready and this firmware
     /// exposes the characteristic — both halves, always.
     @discardableResult

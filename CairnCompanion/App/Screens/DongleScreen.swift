@@ -120,8 +120,49 @@ struct DongleScreen: View {
                      ? "none" : ready.version.capabilities.titles.joined(separator: ", "))
                 .font(.caption.monospaced())
             }
-            if let firmware = ready.deviceInfo?.firmware {
-                LabeledContent("Firmware", value: "\(firmware.major).\(firmware.minor).\(firmware.patch)")
+            if let info = ready.deviceInfo {
+                if let firmware = info.firmware {
+                    LabeledContent("Firmware") {
+                        Text("\(firmware.major).\(firmware.minor).\(firmware.patch)"
+                             + (firmware.isDirtyBuild ? " (dirty)" : "")
+                             + " · \(firmware.commit.hexString.prefix(8))")
+                        .font(.caption.monospaced())
+                    }
+                }
+                if let storage = info.storage {
+                    LabeledContent("Card", value: BenchRecord.storage(storage))
+                }
+                if let boot = info.bootTiming {
+                    LabeledContent("Dongle boot → first fix") {
+                        // The dongle's own time to first fix, re-read once its receiver
+                        // reports one. R2 is measured by putting this beside the phone's
+                        // timeline above, and this is how it gets there without a serial log.
+                        Text(boot.bootToFirstFixMs.map { "\($0) ms" } ?? "no fix yet")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(boot.bootToFirstFixMs == nil ? .secondary : .primary)
+                    }
+                }
+                if let identity = info.identity {
+                    LabeledContent("Dongle enrolment", value: "\(identity.enrolState)")
+                }
+                if !info.transports.isEmpty {
+                    LabeledContent("Transports") {
+                        Text(info.transports
+                            .map { "\($0.kind) \($0.availableNow ? "up" : ($0.enabled ? "on" : "off"))" }
+                            .joined(separator: " · "))
+                        .font(.caption.monospaced())
+                    }
+                }
+                if !info.engines.isEmpty {
+                    LabeledContent("Engines") {
+                        Text(info.engines.map(\.engineID).joined(separator: ", "))
+                            .font(.caption.monospaced())
+                    }
+                }
+                if info.truncated {
+                    Text("The dongle had more to say than fits one read.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
             }
             // Which of the contract's characteristics this firmware actually has. The bits alone
             // are not enough: the old app believed the offload bit while the two offload

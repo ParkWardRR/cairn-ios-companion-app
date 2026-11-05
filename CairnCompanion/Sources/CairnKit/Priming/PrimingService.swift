@@ -118,7 +118,14 @@ public final class PrimingService {
             quality = decoded
             let before = policy.timeline
             policy.receiverReported(decoded, at: clock.now)
-            if policy.timeline != before { noteTimeline() }
+            if policy.timeline != before {
+                noteTimeline()
+                // The receiver has just found the sky for the first time this link, so the
+                // dongle now knows its own time to first fix and did not a moment ago.
+                // `DEVICE_INFO` is rebuilt on every read, so asking again is how that number
+                // reaches the phone — and the bench record — without a serial log.
+                if before.first2DAt == nil || before.first3DAt == nil { link.refreshDeviceInfo() }
+            }
             pump()
         case .companionStatus:
             guard let decoded = PayloadDecoder.companionStatus(data) else { return }
