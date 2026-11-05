@@ -1,4 +1,5 @@
 import CairnKit
+import CairnRuntime
 import SwiftUI
 
 /// What this build is, and the log it wrote.
@@ -10,6 +11,7 @@ import SwiftUI
 struct SettingsScreen: View {
     @Environment(AppModel.self) private var model
     @State private var exporting = false
+    @State private var resetting = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +30,23 @@ struct SettingsScreen: View {
                     }
                 }
 
+                Section("Server") {
+                    LabeledContent("This phone", value: model.server.statusLine)
+                    if let identity = model.server.identity {
+                        LabeledContent("Client id") {
+                            Text(identity.clientID).font(.caption.monospaced())
+                        }
+                        if let pin = PinnedCA.pinFingerprint {
+                            LabeledContent("Certificate pin") {
+                                Text(pin).font(.caption.monospaced())
+                            }
+                        }
+                        Button("Forget This Server", systemImage: "trash", role: .destructive) {
+                            resetting = true
+                        }
+                    }
+                }
+
                 Section {
                     Button("Export Log", systemImage: "square.and.arrow.up") {
                         model.driveLog.flush()
@@ -43,6 +62,20 @@ struct SettingsScreen: View {
             .navigationTitle("Settings")
             .sheet(isPresented: $exporting) {
                 ShareSheet(items: [model.driveLog.fileURL])
+            }
+            .confirmationDialog(
+                "Forget this server?", isPresented: $resetting, titleVisibility: .visible
+            ) {
+                Button("Forget It", role: .destructive) {
+                    Task { try? await model.server.reset() }
+                }
+            } message: {
+                // Worth being exact about: the phone's key is replaced, so the server's record
+                // of this client is dead and enrolling again needs a fresh invitation. Nothing
+                // on the dongle or the server is touched, and no trip is lost.
+                Text("This phone's signing key is replaced and its enrolment forgotten, so "
+                     + "setting it up again needs a new invitation code. Nothing on the dongle "
+                     + "or the server is deleted.")
             }
         }
     }

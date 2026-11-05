@@ -87,6 +87,10 @@ public final class ServerSession {
         }
     }
 
+    /// Forget the server: the enrolment goes, the bearer token goes, and the signing key is
+    /// replaced. The server's record of this client is dead afterwards, so setting up again
+    /// needs a fresh invitation — which is the honest cost of a key that only ever existed on
+    /// this phone. Nothing on the dongle or the server is touched.
     public func reset() async throws {
         try await enrolment.reset()
         await tokenStore.clear()

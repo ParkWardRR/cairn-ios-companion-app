@@ -29,6 +29,18 @@ over USB is fine; back up NVS before anything that clears it.
 4. **Allow location, and allow it as Always.** Without it the phone lends the receiver nothing
    and R2 measures nothing. The Dongle screen says which answer it got.
 
+## Do the link rows before you set up a server
+
+An enrolled phone starts carrying trips the moment the link is ready, and the dongle holds
+standby while it works. That is correct behaviour and it is the wrong thing to have running
+while you are timing how long pairing takes: the rows measure the link, and an offload on top
+of them measures the link plus an upload.
+
+So: the eight rows first, with no server set up. Then enrol and do R3 and R4. If the phone is
+already enrolled, Settings → Server → **Forget This Server**, or expect the Dongle screen to
+say "uploading n of m" in the middle of a pairing row. Forgetting replaces the phone's signing
+key, so setting it up again needs a fresh invitation code — have one ready before you do it.
+
 ## The eight rows
 
 Dongle screen → **Bench** → **Bench run**. **Tap the row's name before you run it.** That drops

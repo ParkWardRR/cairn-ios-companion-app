@@ -58,6 +58,10 @@ final class SmokeTests: XCTestCase {
         // The build has to be able to say what it is, on every channel.
         XCTAssertTrue(app.staticTexts["Version"].exists)
         XCTAssertTrue(app.staticTexts["Channel"].exists)
+        // And whether it is set up with a server. With none, the row says so and there is
+        // nothing to forget.
+        XCTAssertTrue(app.staticTexts["This phone"].exists)
+        XCTAssertFalse(app.buttons["Forget This Server"].exists)
 
         app.tabBars.buttons["Dongle"].tap()
         XCTAssertTrue(app.navigationBars["Dongle"].waitForExistence(timeout: 5))
