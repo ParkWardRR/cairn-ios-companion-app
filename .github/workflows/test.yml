@@ -19,7 +19,10 @@ jobs:
         run: swift test
 
   # The app in a simulator. Separate from `swift test` because it needs the generated project, a
-  # simulator and about six minutes -- so a logic regression still reports in under a minute.
+  # simulator and a few minutes -- so a logic regression still reports in under a minute. There is
+  # no CoreBluetooth in a simulator, so this says nothing about the link: it catches a view that
+  # crashes on appear or a screen with no way out. The link's rules are tested against
+  # FakeCentral in `swift test`, and on the dongle with the run written down under docs/bench/.
   ui:
     runs-on: self-hosted
     timeout-minutes: 45
@@ -29,7 +32,11 @@ jobs:
         run: scripts/fetch-contracts.sh --release
       - name: Generate the project
         working-directory: CairnCompanion
-        run: xcodegen generate
+        # A generated project that differs from the committed one is a failure in itself: the
+        # release script refuses to archive in that state, so CI should not pass in it either.
+        run: |
+          xcodegen generate
+          git diff --exit-code -- CairnCompanion.xcodeproj App/Info.plist
       # CODE_SIGN_IDENTITY=- because an unsigned build dies in the Keychain with -34018.
       - name: xcodebuild test
         working-directory: CairnCompanion

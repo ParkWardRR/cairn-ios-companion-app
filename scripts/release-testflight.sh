@@ -10,7 +10,7 @@
 #
 # What it does, stopping at the first failure:
 #   1. refuse a dirty tree, and refuse a channel that is not beta or stable
-#   2. fetch the pinned contracts and run swift test (333 tests, all CairnCore)
+#   2. fetch the pinned contracts and run swift test (CairnProtocolTests + CairnKitTests)
 #   3. regenerate the Xcode project from project.yml, and fail if that leaves the tree dirty
 #      (project.yml and the checked-in .xcodeproj must already agree)
 #   4. archive, then export -- the store profile is only resolved at -exportArchive, so an
@@ -54,8 +54,14 @@ fi
 
 COMMIT="$(git rev-parse --short HEAD)"
 VERSION="$(awk '/MARKETING_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' "$APP/project.yml")"
-BUILD_NO="$(awk '/CURRENT_PROJECT_VERSION:/ {gsub(/"/, "", $2); print $2; exit}' "$APP/project.yml")"
-[ -n "$VERSION" ] && [ -n "$BUILD_NO" ] || { echo "could not read the version out of project.yml" >&2; exit 1; }
+[ -n "$VERSION" ] || { echo "could not read MARKETING_VERSION out of project.yml" >&2; exit 1; }
+
+# The build number is the commit count, never a hand-edited field: it rises on every commit, it
+# cannot be forgotten, and it cannot disagree with itself the way project.yml (12) and the
+# pbxproj (13) once did. App Store Connect rejects a repeated build number, and a rewritten
+# history is the only thing that could lower this one.
+BUILD_NO="$(git rev-list --count HEAD)"
+[ "$BUILD_NO" -gt 0 ] 2>/dev/null || { echo "git rev-list --count HEAD gave '$BUILD_NO'" >&2; exit 1; }
 
 echo "==> $VERSION ($BUILD_NO) · $CHANNEL · $COMMIT"
 
@@ -84,13 +90,19 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$BUILD/CairnCompanion.xcarchive" \
   -allowProvisioningUpdates \
+  CURRENT_PROJECT_VERSION="$BUILD_NO" \
   CAIRN_CHANNEL="$CHANNEL" \
   CAIRN_COMMIT="$COMMIT" \
   | tail -5
 
 # Read the identity back out of the archive rather than trusting that the settings arrived.
 STAMPED_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleShortVersionString' "$BUILD/CairnCompanion.xcarchive/Info.plist" 2>/dev/null || true)"
-echo "==> archived version $STAMPED_VERSION, stamped as:"
+STAMPED_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:CFBundleVersion' "$BUILD/CairnCompanion.xcarchive/Info.plist" 2>/dev/null || true)"
+if [ "$STAMPED_BUILD" != "$BUILD_NO" ]; then
+  echo "the archive carries build $STAMPED_BUILD but the commit count is $BUILD_NO; refusing" >&2
+  exit 1
+fi
+echo "==> archived version $STAMPED_VERSION ($STAMPED_BUILD), stamped as:"
 /usr/libexec/PlistBuddy -c 'Print :CairnChannel' "$BUILD/CairnCompanion.xcarchive/Products/Applications/CairnCompanion.app/Info.plist"
 /usr/libexec/PlistBuddy -c 'Print :CairnCommit' "$BUILD/CairnCompanion.xcarchive/Products/Applications/CairnCompanion.app/Info.plist"
 
