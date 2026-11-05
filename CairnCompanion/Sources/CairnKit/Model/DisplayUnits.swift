@@ -99,6 +99,17 @@ public struct DisplayUnits: Sendable, Equatable {
         (String(Int((speed == .kph ? kph : kph / Self.kphPerMph).rounded())), speedUnit)
     }
 
+    /// `12.4 mi` — the two parts joined, for a list row that wants one string.
+    public func distanceCaption(metres: Double) -> String {
+        let parts = distanceParts(metres: metres)
+        return "\(parts.value) \(parts.unit)"
+    }
+
+    public func speedCaption(kph: Double) -> String {
+        let parts = speedParts(kph: kph)
+        return "\(parts.value) \(parts.unit)"
+    }
+
     public func economyParts(mpgUS: Double) -> (value: String, unit: String) {
         (String(format: "%.1f", economyValue(mpgUS: mpgUS)), economyUnit)
     }

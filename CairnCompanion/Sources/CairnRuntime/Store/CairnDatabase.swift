@@ -69,12 +69,79 @@ public final class CairnDatabase: Sendable {
             }
             try db.create(index: "bundle_stage", on: "bundle", columns: ["stage"])
         }
+        migrator.registerMigration("sync") { db in
+            // One row. The book and the cursor are written together, in one statement, because
+            // sync/v1 §5 says a page and its cursor land in the same transaction: a cursor
+            // saved without its page is a trip nobody will ever pull again.
+            try db.create(table: "syncState") { t in
+                t.primaryKey("id", .integer)
+                t.column("book", .blob).notNull()
+                t.column("cursor", .blob).notNull()
+            }
+        }
         return migrator
     }
 }
 
 extension BundleRow: FetchableRecord, PersistableRecord {
     public static let databaseTableName = "bundle"
+}
+
+/// `SyncStore` over GRDB: the reconciled trips and the cursor, in one row written at once.
+public struct GRDBSyncStore: SyncStore {
+    private let database: CairnDatabase
+
+    public init(database: CairnDatabase) {
+        self.database = database
+    }
+
+    private struct Row: Codable, FetchableRecord, PersistableRecord {
+        static let databaseTableName = "syncState"
+        var id: Int64 = 1
+        var book: Data
+        var cursor: Data
+    }
+
+    public func loadCursor() async -> SyncCursor? { await load()?.1 }
+    public func loadBook() async -> TripBook? { await load()?.0 }
+
+    public func save(book: TripBook, cursor: SyncCursor) async throws {
+        let payload = Row(
+            book: try JSONEncoder().encode(StoredBook(book)),
+            cursor: try JSONEncoder().encode(cursor)
+        )
+        try await database.writer.write { db in try payload.save(db) }
+    }
+
+    private func load() async -> (TripBook, SyncCursor)? {
+        guard let row = try? await database.writer.read({ db in try Row.fetchOne(db, key: 1) }),
+              let stored = try? JSONDecoder().decode(StoredBook.self, from: row.book),
+              let cursor = try? JSONDecoder().decode(SyncCursor.self, from: row.cursor)
+        else { return nil }
+        return (stored.book, cursor)
+    }
+}
+
+/// `TripBook` keeps its records private so nothing outside it can key on a published id by
+/// accident; this is the one thing that is allowed to, because persistence has to.
+private struct StoredBook: Codable {
+    var trips: [TripSummary]
+    var vehicles: [Vehicle]
+    var assignments: [Assignment]
+
+    init(_ book: TripBook) {
+        trips = book.allRecords
+        vehicles = Array(book.vehicles.values)
+        assignments = Array(book.assignments.values)
+    }
+
+    var book: TripBook {
+        var book = TripBook()
+        for trip in trips { book.apply(trip) }
+        for vehicle in vehicles { book.apply(vehicle) }
+        for assignment in assignments { book.apply(assignment) }
+        return book
+    }
 }
 
 /// `BundleStore` over GRDB.

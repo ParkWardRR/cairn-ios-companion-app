@@ -148,6 +148,22 @@ public enum PushStatus: Sendable, Equatable, Codable {
         case .unknown(let raw): try container.encode(raw)
         }
     }
+
+    /// The string the server sends. Named rather than derived, so a test can compare this
+    /// app's parse with the recorded exchange vectors without re-encoding.
+    public var wireValue: String {
+        switch self {
+        case .accepted: "accepted"
+        case .duplicate: "duplicate"
+        case .conflict: "conflict"
+        case .rejected: "rejected"
+        case .unknown(let raw): raw
+        }
+    }
+
+    /// Whether the server took it. A `duplicate` is a success: the operations are idempotent
+    /// by `operation_id`, which is what makes retrying after a lost answer safe.
+    public var isAccepted: Bool { self == .accepted || self == .duplicate }
 }
 
 public struct FieldConflict: Codable, Sendable, Equatable {
@@ -230,6 +246,62 @@ public enum PullOutcome: Sendable, Equatable {
 
 public struct AckResponse: Codable, Sendable, Equatable {
     public var acknowledged: Int64
+}
+
+/// One trip's shape (`sync/v1` §12.1): trusted positions only, the companion's own fixes
+/// excluded, as runs with the gaps between them named.
+public struct TripTrack: Codable, Sendable, Equatable {
+    public struct Run: Codable, Sendable, Equatable {
+        public var startedMS: Int64
+        public var endedMS: Int64
+        public var count: Int
+        /// Encoded polyline, precision 5.
+        public var polyline: String
+
+        enum CodingKeys: String, CodingKey {
+            case count, polyline
+            case startedMS = "started_ms"
+            case endedMS = "ended_ms"
+        }
+    }
+
+    public struct Gap: Codable, Sendable, Equatable {
+        public var afterMS: Int64
+        public var beforeMS: Int64
+        public var durationMS: Int64
+
+        enum CodingKeys: String, CodingKey {
+            case afterMS = "after_ms"
+            case beforeMS = "before_ms"
+            case durationMS = "duration_ms"
+        }
+    }
+
+    public var tripID: String
+    public var vehicleID: String
+    public var startedMS: Int64
+    public var endedMS: Int64
+    /// `polyline5` is the only value this build knows. The contract says a reader that does
+    /// not know an encoding must refuse the body rather than guess, which is what
+    /// `isSupported` is for.
+    public var encoding: String
+    public var pointCount: Int
+    /// The shape is right and the sample rate is not.
+    public var thinned: Bool?
+    public var runs: [Run]
+    public var gaps: [Gap]
+
+    enum CodingKeys: String, CodingKey {
+        case encoding, thinned, runs, gaps
+        case tripID = "trip_id"
+        case vehicleID = "vehicle_id"
+        case startedMS = "started_ms"
+        case endedMS = "ended_ms"
+        case pointCount = "point_count"
+    }
+
+    public var isSupported: Bool { encoding == "polyline5" }
+    public var isEmpty: Bool { runs.isEmpty }
 }
 
 /// A chunk the server still wants, with where it lives in the bundle byte stream (section 13).

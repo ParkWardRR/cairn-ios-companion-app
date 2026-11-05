@@ -126,6 +126,26 @@ public actor CairnServerClient {
         return try await authenticatedJSON(method: "POST", target: "/v1/sync/ack", body: body)
     }
 
+    /// One trip's shape (`sync/v1` §12.1). `endedMS` is required by the contract: a trip is
+    /// derived rather than stored, so the server cannot look one up by its id alone.
+    public func track(tripID: String, endedMS: Int64) async throws -> TripTrack {
+        // The id goes in a path segment, so it is checked here rather than trusted: it is
+        // `<32 hex>:<digits>` and nothing else.
+        let parts = tripID.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              parts[0].count == 32, parts[0].allSatisfy(\.isHexDigit),
+              !parts[1].isEmpty, parts[1].allSatisfy(\.isNumber) else {
+            throw CairnServerError.invalidArgument("trip id")
+        }
+        let target = "/v1/trips/\(tripID)/track?ended_ms=\(endedMS)"
+        let request = try signedRequest(method: "GET", target: target, body: Data())
+        let response = try await execute(request)
+        guard (200...299).contains(response.status) else { throw classify(response) }
+        let track: TripTrack = try decodeBody(response)
+        guard track.isSupported else { throw CairnServerError.malformedResponse }
+        return track
+    }
+
     // MARK: - Snapshot
 
     public func snapshot(vehicleID: String? = nil) async throws -> Data {

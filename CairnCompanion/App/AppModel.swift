@@ -22,6 +22,8 @@ final class AppModel {
     let server: ServerSession
     /// Carrying finished trips over, and the receipts back.
     let offload: OffloadCoordinator
+    /// What the server has published: trips, cars, assignments.
+    let sync: SyncEngine
     /// The log on disk, so a link can be reviewed after a drive the phone spent locked in a
     /// mount. The ring in `LinkSupervisor` is what the screen shows; this is what survives a
     /// relaunch and what Export Log shares.
@@ -29,13 +31,14 @@ final class AppModel {
 
     init(
         build: BuildIdentity, link: LinkSupervisor, priming: PrimingService,
-        server: ServerSession, offload: OffloadCoordinator, driveLog: DriveLog
+        server: ServerSession, offload: OffloadCoordinator, sync: SyncEngine, driveLog: DriveLog
     ) {
         self.build = build
         self.link = link
         self.priming = priming
         self.server = server
         self.offload = offload
+        self.sync = sync
         self.driveLog = driveLog
     }
 
@@ -75,15 +78,19 @@ final class AppModel {
 
         // A database that will not open is not a reason to have no app: the link, the priming
         // and the diagnostics all still work, and offload says it is not available.
-        let store: any BundleStore = (try? CairnDatabase()).map { GRDBBundleStore(database: $0) }
-            ?? InMemoryBundleStore()
+        let database = try? CairnDatabase()
+        let store: any BundleStore = database.map { GRDBBundleStore(database: $0) } ?? InMemoryBundleStore()
         let offload = OffloadCoordinator(
             link: link, provider: central, session: server, store: store, clock: clock
+        )
+        let sync = SyncEngine(
+            session: server,
+            store: database.map { GRDBSyncStore(database: $0) } ?? InMemorySyncStore()
         )
 
         let model = AppModel(
             build: .current, link: link, priming: priming,
-            server: server, offload: offload, driveLog: driveLog
+            server: server, offload: offload, sync: sync, driveLog: driveLog
         )
 
         // The two things that follow the link, wired in one place rather than fighting over
@@ -107,9 +114,11 @@ final class AppModel {
         link.start()
         priming.requestAuthorisation()
         Task {
+            await sync.load()
             await server.load()
             await server.chooseRoute()
             await offload.sweep()
+            await sync.sync()
         }
         return model
     }

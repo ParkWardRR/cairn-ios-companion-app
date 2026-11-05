@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Two tabs, because there are two things to look at: the dongle, and this build.
+/// Three tabs: the dongle, the drives, and this build.
 ///
 /// D6: diagnostics are the first interface. Firmware #44 has been open since 2026-10-10 waiting
 /// for a second central to say what it saw, and the phone is that central — so the first screen
@@ -10,6 +10,9 @@ struct RootScreen: View {
         TabView {
             Tab("Dongle", systemImage: "dot.radiowaves.left.and.right") {
                 DongleScreen()
+            }
+            Tab("Trips", systemImage: "car") {
+                TripsScreen()
             }
             Tab("Settings", systemImage: "gearshape") {
                 SettingsScreen()

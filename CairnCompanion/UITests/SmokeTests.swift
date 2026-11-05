@@ -1,6 +1,6 @@
 import XCTest
 
-/// The app launches and both screens open.
+/// The app launches and every screen opens.
 ///
 /// This is all a simulator can say about an app whose subject is a radio: there is no
 /// CoreBluetooth in the simulator, so the link can never be more than `off` here. Every rule
@@ -10,7 +10,7 @@ import XCTest
 final class SmokeTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
-    func testBothScreensOpen() {
+    func testEveryScreenOpens() {
         let app = XCUIApplication()
         app.launch()
 
@@ -23,6 +23,12 @@ final class SmokeTests: XCTestCase {
         XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Forget This Dongle"].exists)
         XCTAssertTrue(app.buttons["Export Log"].firstMatch.exists)
+
+        app.tabBars.buttons["Trips"].tap()
+        XCTAssertTrue(app.navigationBars["Trips"].waitForExistence(timeout: 5))
+        // With no server set up there are no trips, and the screen has to say which of the two
+        // reasons it is rather than showing an empty list.
+        XCTAssertTrue(app.staticTexts["No server yet"].waitForExistence(timeout: 5))
 
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
