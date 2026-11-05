@@ -151,31 +151,37 @@ struct BenchMatrixTests {
                 "Retry has to get as far as the version read again: \(afterRetry)")
     }
 
-    /// The same row, in the shape the radio actually produced on 2026-11-05.
+    /// `CBErrorDomain#15` must **not** be treated as a stale bond, and this is the row that says
+    /// so, because the obvious reading of it is wrong.
     ///
-    /// This row passed for weeks against `refusesRead`, an `ATT 5` on the version read, and the
-    /// hardware never did that: once the dongle's half of the bond was gone, iOS failed to
-    /// encrypt the link on `connect` and `CBErrorDomain#15` arrived before there was anything to
-    /// read. `LinkMachine` counted it as an ordinary connect failure, so `pairingFailures` stayed
-    /// at zero, `needsForget` was never reached, and the phone backed off to its 15 s ceiling for
-    /// as long as it was left running — never naming the one fix that works.
-    @Test("the bond fails at encryption, not at the read: still needsForget, still names the fix")
-    func dongleStaleFailsToEncrypt() {
+    /// Measured 2026-11-05: the phone logged `#15` — "failed to encrypt the connection" — on
+    /// attempt after attempt, while the dongle's own log showed `paired: encrypted=1 bonded=1` on
+    /// every one of those same attempts. The bond was in perfect order; the *encryption procedure
+    /// was timing out* because the link could not stay up for the few seconds it needs. An app
+    /// that escalated this to `needsForget` would send the owner to delete a working pairing, and
+    /// the next attempt would fail identically. So it keeps retrying, and says what it really is.
+    @Test("a failure to encrypt is a radio problem, not a bond problem: keep retrying")
+    func failureToEncryptKeepsRetrying() {
         let failure = LinkFailure(domain: LinkFailure.cbDomain,
                                   code: LinkFailure.CB.encryptionTimedOut.rawValue,
                                   message: "Failed to encrypt the connection.")
         let bench = Bench(dongle: FakeCentral.Dongle(pairing: .refusesToEncrypt(failure)))
         bench.powerOnAndStart()
-        bench.advance(60)
+        bench.advance(120)
 
-        #expect(bench.state.name == "needsForget", "got \(bench.state.name)\n\(bench.transcript)")
+        #expect(bench.state.name != "needsForget",
+                "a good bond must not be thrown away for a bad link\n\(bench.transcript)")
+        #expect(!bench.askedTheOwnerForSomething)
+
         let advice = bench.supervisor.advice
-        #expect(advice?.contains("Forget This Device") == true, "advice was \(advice ?? "nil")")
+        #expect(advice?.contains("usually signal rather than pairing") == true,
+                "advice was \(advice ?? "nil")")
         #expect(advice?.contains("CB 15") == true, "the advice must carry the code: \(advice ?? "nil")")
     }
 
-    /// `CB 14` is iOS saying the dongle has dropped our keys, which is the same fix.
-    @Test("iOS reporting the peer removed its pairing information also reaches needsForget")
+    /// `CB 14` is different: iOS is saying the peer no longer recognises this phone's keys, which
+    /// is unambiguous and only the owner can clear.
+    @Test("iOS reporting the peer removed its pairing information does reach needsForget")
     func peerRemovedPairingReachesNeedsForget() {
         let failure = LinkFailure(domain: LinkFailure.cbDomain,
                                   code: LinkFailure.CB.peerRemovedPairingInformation.rawValue,
@@ -185,7 +191,9 @@ struct BenchMatrixTests {
         bench.advance(60)
 
         #expect(bench.state.name == "needsForget", "got \(bench.state.name)\n\(bench.transcript)")
-        #expect(bench.supervisor.advice?.contains("CB 14") == true)
+        let advice = bench.supervisor.advice
+        #expect(advice?.contains("Forget This Device") == true, "advice was \(advice ?? "nil")")
+        #expect(advice?.contains("CB 14") == true)
     }
 
     @Test("after the owner forgets it and the dongle pairs again, the link comes up")

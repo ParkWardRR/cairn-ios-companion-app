@@ -83,10 +83,9 @@ trips.
 The firmware sets no connection parameters at all — no `updateConnParams`, no supervision
 timeout — so the link runs on whatever iOS proposes. Worth knowing before tuning anything.
 
-## Then the bond went stale, and the app did the wrong thing
+## "Failed to encrypt the connection" is not a bond problem, and nearly fooled me
 
-Later in the same session the dongle's half of the bond stopped matching, and the link stopped
-getting as far as a read at all:
+Later in the same session the link stopped getting as far as a read at all:
 
 ```
 14:15:04.613 link connecting   connected C734EBB4
@@ -96,31 +95,49 @@ getting as far as a read at all:
 14:15:07.835 link backoff      → backoff · attempt 3, 4 s
 ```
 
-That is the **Dongle stale** row, and the app failed it. It should reach `needsForget` within
-three attempts with advice naming Settings › Bluetooth › Forget This Device. Instead it backed off
-to its 15 s ceiling and kept going indefinitely, saying nothing useful.
+Read on its own, that is the **Dongle stale** row: iOS cannot encrypt with the key it holds, so
+the bond must have gone stale, so the app should reach `needsForget` and say to forget Cairn in
+Settings. It was not doing that, so I made it do that — and that was wrong.
 
-The reason is worth writing down, because the row's unit test passed the whole time:
+**The dongle's own log, through the same window:**
 
-- The bench matrix modelled a stale bond as `refusesRead(ATT 5)` — the dongle refusing the
-  `PROTOCOL_VERSION` read. **The radio never does that.** iOS encrypts a bonded link *before* it
-  will hand over the service list, so the failure lands on `connect` as `CBErrorDomain#15`, long
-  before there is anything to read.
-- `LinkMachine` counted that as an ordinary connect failure, so `pairingFailures` stayed at zero
-  and `needsForget` was unreachable by that path.
-- `LinkFailure.isEncryptionFailure` had been written for exactly this case — and **nothing in the
-  app ever consulted it.**
+```
+713640 [BLE] INFO  paired: encrypted=1 bonded=1
+713849 [BLE] INFO  companion connected
+716123 [BLE] INFO  companion disconnected (reason 520)
+718526 [BLE] INFO  paired: encrypted=1 bonded=1
+718856 [BLE] INFO  companion connected
+720532 [BLE] INFO  companion disconnected (reason 520)
+```
 
-Fixed: `CB 15` and `CB 14` now count as pairing failures wherever they arrive — on a connect, and
-on a disconnect in any state, since on hardware they land in `discovering` as often as in
-`securing` — and both earn the advice that names the fix. `FakeCentral` gained a
-`refusesToEncrypt` mode so the bench matrix exercises the shape the radio produces, and two rows
-pin it.
+Pairing succeeded on **every** attempt the phone was reporting `#15` on. The bond was in perfect
+order. What was failing was the *encryption procedure timing out* — it needs a link that stays up
+for a few seconds, and this one was lasting 1.7 s and 2.3 s. `CBErrorDomain#15` here is a second
+symptom of the supervision-timeout problem above, not a cause of its own.
 
-This is the sharpest lesson of the run: the fake was modelled on the firmware's behaviour, which
-was the right instinct, but the failure the *central* sees is not the failure the *peripheral*
-logs. A row that passes green against a fake it shares a mental model with proves less than it
-looks like it does.
+So escalating it would have told the owner to delete a working pairing, and the next attempt would
+have failed identically. **Both halves of the evidence were needed to see that**; the phone's log
+alone points firmly at the wrong answer.
+
+What landed instead:
+
+- **`CB 14`** — iOS saying the peer no longer recognises this phone's keys — is unambiguous, and
+  does now count as a pairing failure wherever it arrives, including a disconnect in `discovering`
+  rather than only in `securing`. iOS encrypts a bonded link before handing over the service list,
+  so a genuine bond failure lands there, not at the version read.
+- **`CB 15`** keeps retrying, and its advice now says what it really is: the link did not survive
+  long enough to finish securing, that is usually signal, here is the signal, and it is retrying
+  by itself — with the forget-the-device instruction offered only as the fallback if it never gets
+  through.
+- `FakeCentral` gained a `refusesToEncrypt` mode so the matrix can exercise a failure that arrives
+  on `connect` at all, which it previously could not, and two rows pin the distinction.
+
+The sharpest lesson of the run is not the fix, it is the near miss. The bench matrix modelled a
+stale bond as `refusesRead(ATT 5)`, a shape the radio never produced; the radio's shape looked like
+a bond failure and was not. **A fake built from the peripheral's behaviour does not tell you what
+the central sees, and the central's error name is not a diagnosis.** A row that passes green
+against a fake it shares a mental model with proves less than it looks like it does — and the
+plausible-looking fix for a real failure can still be the wrong one.
 
 ## Two more things found, neither of them the link
 

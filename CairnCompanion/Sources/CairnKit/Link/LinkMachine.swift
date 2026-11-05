@@ -101,11 +101,11 @@ public struct LinkMachine: Sendable {
         switch state {
         case .needsForget(let failure):
             // Every way the bond can disagree earns the same instruction, because there is only
-            // one fix and the app cannot apply it. `CB 15` and `CB 14` used to fall through to
-            // `failure.message` — "Failed to encrypt the connection" — which tells the owner
-            // what went wrong and nothing about what to do.
+            // one fix and the app cannot apply it. `CB 14` used to fall through to
+            // `failure.message`, which tells the owner what went wrong and nothing about what to
+            // do. `CB 15` is not here on purpose — it is usually a bad link, not a bad bond.
             if failure.isAuthentication || failure == .pairingRefused
-                || failure.isEncryptionFailure || failure.isPeerRemovedPairing {
+                || failure.isPeerRemovedPairing {
                 return "Open Settings › Bluetooth, tap the ⓘ beside Cairn and choose "
                     + "\"Forget This Device\", then come back and tap Retry. The dongle no longer "
                     + "holds the key this phone is offering (\(failure.shortCode)), and an app "
@@ -139,6 +139,17 @@ public struct LinkMachine: Sendable {
             }
             return "No Cairn dongle answered. It advertises only when it is powered: check the "
                 + "car's ignition, or that the dongle is not in a Wi-Fi slot."
+        // "Failed to encrypt the connection" sounds like a key problem and is usually a radio
+        // one: the pairing handshake needs a link that stays up long enough to finish it. On
+        // 2026-11-05 the dongle logged a successful pair on every attempt the phone reported this
+        // on. So name the likely cause, and the one that would be true if it persists.
+        case .backoff(_, let reason, _) where reason.isEncryptionFailure:
+            var advice = "The dongle answered but the link did not survive long enough to finish "
+                + "securing it. That is usually signal rather than pairing"
+            if let lastRSSI { advice += ", and it was last heard at \(lastRSSI) dBm" }
+            advice += ". Retrying by itself. If it never gets through, Settings › Bluetooth › "
+                + "Forget This Device and tap Retry (\(reason.shortCode))."
+            return advice
         case .backoff(_, let reason, _):
             return reason.message
         default:
@@ -268,19 +279,21 @@ public struct LinkMachine: Sendable {
             let failure = failure ?? LinkFailure(domain: LinkFailure.cbDomain,
                                                  code: LinkFailure.CB.connectionFailed.rawValue,
                                                  message: "the connection failed")
-            // `CBErrorDomain#15` is iOS saying it could not encrypt the link with the key it
-            // holds, and `#14` is iOS saying the dongle no longer recognises that key. Both are
-            // the bond disagreeing, which is the one failure an app cannot fix: only the owner
-            // can delete an iOS pairing. Counting them is what eventually reaches `needsForget`
-            // and tells them so.
+            // `CBErrorDomain#14` is iOS saying the peer no longer recognises this phone's keys.
+            // That is unambiguous and only the owner can fix it, so count it: three of them reach
+            // `needsForget` and name the fix, rather than backing off forever.
             //
-            // Measured 2026-11-05: the dongle dropped its half of the bond and the phone then
-            // logged `#15` on attempt after attempt, backing off to the 15 s ceiling for as long
-            // as it was left running and never once naming the fix. `isEncryptionFailure` was
-            // already written for exactly this and nothing consulted it — the bench matrix's
-            // "Dongle stale" row passes against `FakeCentral` because the fake reports it as a
-            // disconnect while securing, and the radio reports it as a failure to connect.
-            if failure.isEncryptionFailure || failure.isPeerRemovedPairing {
+            // `#15` is deliberately **not** counted, and that is the whole lesson of 2026-11-05.
+            // It reads like a bond failure — "failed to encrypt the connection" — and it is not:
+            // the dongle's own log showed `paired: encrypted=1 bonded=1` on every single attempt
+            // through the same window the phone was logging `#15`. The bond was fine; the
+            // *encryption procedure was timing out* on a link that could not hold a connection
+            // for more than a few seconds. Escalating it would have sent the owner to Settings to
+            // delete a perfectly good pairing, and the next attempt would have failed the same
+            // way. A stale bond already has paths that do catch it: the firmware's own "pairing
+            // failed, disconnecting" arrives as a disconnect inside `securing`, and a refused
+            // read arrives as `ATT 5`.
+            if failure.isPeerRemovedPairing {
                 return pairingFailed(failure, now: now)
             }
             return backoff(failure, now: now)
@@ -351,12 +364,12 @@ public struct LinkMachine: Sendable {
     ) -> [LinkEffect] {
         guard state.peripheral == peripheral else { return [] }
 
-        // An encryption failure, or iOS reporting the peer has dropped our keys, is the bond
-        // disagreeing — whatever state it arrives in. Measured on hardware it arrives in
-        // `discovering` as often as in `securing`, because iOS encrypts a bonded link before
-        // handing over the service list, not at the version read. Counted wherever it lands, or
-        // a stale bond is an endless backoff that never names the fix.
-        if let failure, failure.isEncryptionFailure || failure.isPeerRemovedPairing {
+        // iOS reporting that the peer has dropped our keys is the bond disagreeing, whatever
+        // state it arrives in — on hardware it lands in `discovering` as often as in `securing`,
+        // because iOS encrypts a bonded link before handing over the service list rather than at
+        // the version read. Counted wherever it lands, or a stale bond is an endless backoff that
+        // never names the fix. An encryption *timeout* is not included; see `failedToConnect`.
+        if let failure, failure.isPeerRemovedPairing {
             return pairingFailed(failure, now: now)
         }
 
