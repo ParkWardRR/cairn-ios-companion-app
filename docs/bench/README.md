@@ -14,6 +14,11 @@ Every record states, at the top:
 and then the numbers the phase asked for, whatever they show. A failed row gets its link log, not
 a guess at the cause.
 
+[RUNBOOK.md](RUNBOOK.md) is what to do on the day, in the order that stops a run being wasted.
+
+The app writes most of a record itself: Dongle screen → Bench → Bench Report. Tap a row's name
+before you run it, so the record can say how long that row took.
+
 | Record | Phase | Subject |
 |---|---|---|
 | _(none yet)_ | | |

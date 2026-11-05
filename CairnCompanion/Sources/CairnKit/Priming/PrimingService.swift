@@ -141,6 +141,7 @@ public final class PrimingService {
         for action in policy.next(now: now, location: location.lastFix, isCharging: location.isCharging) {
             switch link.write(action.data, to: action.characteristic) {
             case .sent:
+                policy.confirm(action)
                 switch action {
                 case .clock: sent.clocks += 1
                 case .positionHint:
@@ -149,9 +150,13 @@ public final class PrimingService {
                 case .liveFix: sent.fixes += 1
                 }
             case .backpressure:
+                // The radio would not take it. A live fix is dropped; the clock and the hint
+                // are put back so the next pump tries again.
                 sent.droppedToBackpressure += 1
+                policy.rollback(action)
             case .notAvailable:
                 sent.refusedByLink += 1
+                policy.rollback(action)
             }
         }
         clock.wake("priming", at: policy.nextDue(now: now)) { [weak self] in self?.pump() }

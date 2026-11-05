@@ -171,6 +171,37 @@ public struct PrimingPolicy: Sendable, Equatable {
         return actions
     }
 
+    /// Un-spend an action the radio would not take.
+    ///
+    /// `next` marks what it returns as sent, which is right for a live fix — flow control
+    /// refusing one is a fix worth dropping, and the firmware would reject it at 3 s anyway.
+    /// It is wrong for the two that happen once. The clock is what stops a trip decoding to
+    /// 1970 and the position hint is the whole of this phase, and both are issued at
+    /// link-ready, which is precisely when the radio is busiest with discovery and
+    /// subscription traffic. Losing either to a moment of backpressure and not noticing would
+    /// cost a minute in one case and a whole receiver start in the other.
+    public mutating func rollback(_ action: Action) {
+        switch action {
+        case .clock:
+            lastClockAt = nil
+            if timeline.clockHintAt != nil, sent == 0 { timeline.clockHintAt = nil }
+        case .positionHint:
+            timeline.positionHintAt = nil
+        case .liveFix:
+            // Deliberately nothing. A position sent late is worse than none.
+            break
+        }
+    }
+
+    /// How many of each have actually gone, so a rollback can tell the first attempt from a
+    /// later one.
+    private var sent = 0
+
+    /// Confirm an action reached the radio.
+    public mutating func confirm(_ action: Action) {
+        if case .clock = action { sent += 1 }
+    }
+
     /// When `next` would next have something to do, so the caller can sleep until then rather
     /// than spin. Nil when the link is down.
     public func nextDue(now: Date) -> Date? {

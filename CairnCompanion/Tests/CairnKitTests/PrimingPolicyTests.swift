@@ -247,3 +247,68 @@ struct ReceiverTimelineTests {
         #expect(ReceiverTimeline().seconds(t0) == nil)
     }
 }
+
+@Suite("PrimingPolicy: a write the radio would not take")
+struct PrimingRollbackTests {
+    @Test("a hint lost to backpressure is sent again, not lost for the link")
+    func hintIsRetried() {
+        // The hint is the whole of this phase and it goes at link-ready, which is exactly when
+        // the radio is busiest with discovery and subscription traffic. Marking it sent and
+        // then having flow control refuse it would cost a whole receiver start.
+        var policy = PrimingPolicy()
+        policy.linkBecameReady(at: t0, capabilities: everything)
+        let cached = fix(age: 300)
+
+        let first = policy.next(now: t0, location: cached, isCharging: false)
+        guard let hint = first.first(where: { if case .positionHint = $0 { true } else { false } }) else {
+            Issue.record("no hint in \(first)"); return
+        }
+        #expect(policy.timeline.sentPositionHint)
+        policy.rollback(hint)
+        #expect(!policy.timeline.sentPositionHint, "it did not go, so it did not go")
+
+        let second = policy.next(now: t0.addingTimeInterval(1), location: cached, isCharging: false)
+        #expect(second.contains { if case .positionHint = $0 { true } else { false } },
+                "it should be offered again")
+    }
+
+    @Test("a clock lost to backpressure is sent again rather than waiting out the minute")
+    func clockIsRetried() {
+        var policy = PrimingPolicy()
+        policy.linkBecameReady(at: t0, capabilities: everything)
+        let first = policy.next(now: t0, location: nil, isCharging: false)
+        guard let clock = first.first else { Issue.record("no clock"); return }
+
+        policy.rollback(clock)
+        let second = policy.next(now: t0.addingTimeInterval(0.5), location: nil, isCharging: false)
+        #expect(second.contains { if case .clock = $0 { true } else { false } },
+                "a minute without a clock is a minute of a trip dated 1970")
+    }
+
+    @Test("a live fix refused by flow control is dropped and not queued")
+    func liveFixIsDropped() {
+        // A position sent late is worse than none, and the firmware rejects it at 3 s anyway.
+        var policy = PrimingPolicy()
+        policy.linkBecameReady(at: t0, capabilities: everything)
+        _ = policy.next(now: t0, location: fix(age: 0), isCharging: false)
+
+        var now = t0.addingTimeInterval(1)
+        let actions = policy.next(now: now, location: fix(age: 0, from: now), isCharging: false)
+        guard let live = actions.first(where: { if case .liveFix = $0 { true } else { false } }) else {
+            Issue.record("no live fix in \(actions)"); return
+        }
+        policy.rollback(live)
+        now = now.addingTimeInterval(0.1)
+        let again = policy.next(now: now, location: fix(age: 0, from: now), isCharging: false)
+        #expect(again.isEmpty, "the slot is spent; the next one comes a second later")
+    }
+
+    @Test("a confirmed clock keeps its cadence")
+    func confirmedClockKeepsCadence() {
+        var policy = PrimingPolicy()
+        policy.linkBecameReady(at: t0, capabilities: everything)
+        for action in policy.next(now: t0, location: nil, isCharging: false) { policy.confirm(action) }
+        #expect(policy.next(now: t0.addingTimeInterval(30), location: nil, isCharging: false).isEmpty)
+        #expect(!policy.next(now: t0.addingTimeInterval(61), location: nil, isCharging: false).isEmpty)
+    }
+}

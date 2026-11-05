@@ -10,6 +10,17 @@ import XCTest
 final class SmokeTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    /// Swipe until the element is both present and on screen, or give up. A `List` builds only
+    /// the rows it is showing, so an element below the fold does not merely fail `isHittable`:
+    /// it does not exist in the tree at all.
+    private func scroll(_ app: XCUIApplication, to element: XCUIElement, swipes: Int = 8) -> Bool {
+        for _ in 0..<swipes {
+            if element.exists && element.isHittable { return true }
+            app.swipeUp()
+        }
+        return element.exists && element.isHittable
+    }
+
     func testEveryScreenOpens() {
         let app = XCUIApplication()
         app.launch()
@@ -19,10 +30,21 @@ final class SmokeTests: XCTestCase {
 
         // The Dongle screen's controls must be reachable even with no radio: a simulator's
         // central never leaves `off`, and a diagnostics screen you cannot use when nothing works
-        // is a diagnostics screen for nothing.
-        XCTAssertTrue(app.buttons["Retry"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Forget This Dongle"].exists)
-        XCTAssertTrue(app.buttons["Export Log"].firstMatch.exists)
+        // is a diagnostics screen for nothing. They are below the fold, and a list only builds
+        // the rows it is showing, so these scroll rather than assuming a layout.
+        XCTAssertTrue(scroll(app, to: app.buttons["Retry"]), "Retry")
+        XCTAssertTrue(scroll(app, to: app.buttons["Forget This Dongle"]), "Forget This Dongle")
+
+        // The bench controls have to be reachable on the bench, which is a place with no
+        // server and often no link either.
+        let disclosure = app.staticTexts["bench.disclosure"]
+        XCTAssertTrue(scroll(app, to: disclosure), "bench disclosure")
+        disclosure.tap()
+
+        let freshPair = app.buttons["bench.row.fresh-pair"]
+        XCTAssertTrue(scroll(app, to: freshPair), "the Fresh pair row")
+        freshPair.tap()
+        XCTAssertTrue(scroll(app, to: app.buttons["bench.report"]), "Bench Report")
 
         app.tabBars.buttons["Trips"].tap()
         XCTAssertTrue(app.navigationBars["Trips"].waitForExistence(timeout: 5))

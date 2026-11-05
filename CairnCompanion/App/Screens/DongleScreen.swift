@@ -15,6 +15,8 @@ struct DongleScreen: View {
     @State private var now = Date()
     @State private var sharing: SharePayload?
     @State private var enrolling = false
+    @State private var startedRow: String?
+    @State private var benchExpanded = false
 
     private var link: LinkSupervisor { model.link }
     private var priming: PrimingService { model.priming }
@@ -31,6 +33,7 @@ struct DongleScreen: View {
                 locationSection
                 if !link.subscriptionFailures.isEmpty { subscriptionSection }
                 controlsSection
+                benchSection
                 logSection
             }
             .navigationTitle("Dongle")
@@ -288,6 +291,62 @@ struct DongleScreen: View {
         }
     }
 
+    /// Tomorrow's bench, made possible to record.
+    ///
+    /// Tapping a row drops a marker into the link log, so an exported hour is segmented by row
+    /// instead of being one undifferentiated stream, and the record can say how long *that row*
+    /// took to reach ready. Bench Report writes the markdown file `docs/bench/` wants, with
+    /// everything the phone already knows filled in and blanks only where a person is the only
+    /// source — the firmware commit, which car, and whether the row passed.
+    private var benchSection: some View {
+        Section {
+            DisclosureGroup(isExpanded: $benchExpanded) {
+                ForEach(BenchMatrix.r1) { row in
+                    Button {
+                        link.note(BenchMatrix.marker(row))
+                        startedRow = row.name
+                    } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.name)
+                                Text(row.setup)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.leading)
+                            }
+                            Spacer()
+                            let runs = observations.arrivals.filter { $0.row == row.name }
+                            Text(runs.isEmpty ? "—"
+                                 : runs.map { String(format: "%.1f", $0.seconds) }.joined(separator: " / "))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(runs.count >= 2 ? Color.green : Color.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("bench.row.\(row.id)")
+                }
+                Button("Bench Report", systemImage: "doc.badge.plus") { shareBenchReport() }
+                    .accessibilityIdentifier("bench.report")
+            } label: {
+                Text("Bench run").accessibilityIdentifier("bench.disclosure")
+            }
+            if let startedRow {
+                Text("Running **\(startedRow)**. Everything from here is marked as part of it; "
+                     + "tap another row when you move on.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Bench")
+        } footer: {
+            Text("Tap a row before you run it, then Bench Report when you are done. Seconds are "
+                 + "from the first scan or connect of the attempt to ready — two figures mean "
+                 + "the row has been run the twice the matrix asks for.")
+        }
+    }
+
+    private var observations: BenchObservations { BenchObservations(from: link.log) }
+
     private var controlsSection: some View {
         Section {
             Button("Retry", systemImage: "arrow.clockwise") { link.retry() }
@@ -334,6 +393,19 @@ struct DongleScreen: View {
         case .backoff: .yellow
         case .off, .idle: .secondary
         }
+    }
+
+    private func shareBenchReport() {
+        let now = Date()
+        let text = BenchRecord.markdown(
+            at: now, build: model.build, state: link.state, ready: link.ready,
+            lastRSSI: link.lastRSSI, timeline: priming.timeline,
+            offload: offload.summary, log: link.log
+        )
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(BenchRecord.filename(subject: "ble-pairing", at: now))
+        try? Data(text.utf8).write(to: url)
+        sharing = SharePayload(url: url)
     }
 
     private func share() {
